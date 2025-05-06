@@ -60,7 +60,7 @@ which will use the default `models/config.py`.
 
 ## Generate
 
-To try a trained model, you can simply use the provided generate script
+To try a [trained model](https://huggingface.co/lusxvr/nanoVLM-222M), you can simply use the provided generate script
 ```bash
 python generate.py
 ```
