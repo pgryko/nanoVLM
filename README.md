@@ -81,7 +81,7 @@ Generation 5:  This is a cat sitting on a rug, which is on the ground. The cat i
 If you like the project and want to use it somewhere, please use this citation:
 ```
 @misc{wiedmann2025nanovlm,
-  author = {Luis Wiedmann and Aritra Roy Gosthipaty and Andi Marafioti},
+  author = {Luis Wiedmann and Aritra Roy Gosthipaty and Andrés Marafioti},
   title = {nanoVLM},
   year = {2025},
   publisher = {GitHub},
