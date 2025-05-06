@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 
-class MP(nn.Module):
+class ModalityProjector(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg

@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 import models.config as cfg
 
 
-class VQADataset(Dataset):
+class VQADataset(Dataset):  # Visual Question Answering Dataset
     def __init__(self, dataset, tokenizer, image_processor):
         self.dataset = dataset
         self.tokenizer = tokenizer
@@ -55,7 +55,7 @@ class VQADataset(Dataset):
         }
 
 
-class MMStarDataset(Dataset):
+class MMStarDataset(Dataset):  # https://huggingface.co/datasets/Lin-Chen/MMStar
     def __init__(self, dataset, tokenizer, image_processor):
         self.dataset = dataset
         self.tokenizer = tokenizer

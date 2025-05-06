@@ -6,7 +6,7 @@
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>  
 
-nanoVLM is the simplest repository for training/finetuning a small to medium sized Vision-Language Model with a lightweight implementation in pure PyTorch. The code itself is very readable and approachable, the model consists of a Vision Backbone (`models/vit.py` ~150 lines), Language Decoder (`models/lm.py` ~250 lines), Modality Projection (`models/mp.py` ~50 lines) and the VLM itself (`models/vlm.py` ~100 lines) and a simple training loop (`train.py` ~200 lines).
+nanoVLM is the simplest repository for training/finetuning a small sized Vision-Language Model with a lightweight implementation in pure PyTorch. The code itself is very readable and approachable, the model consists of a Vision Backbone (`models/vit.py` ~150 lines), Language Decoder (`models/lm.py` ~250 lines), Modality Projection (`models/mp.py` ~50 lines) and the VLM itself (`models/vlm.py` ~100 lines) and a simple training loop (`train.py` ~200 lines).
 
 ### What can nanoVLM do?
 The model definition and training logic of this repository fits in ~750 lines, with some more boilerplate logging and parameter loading. 
@@ -39,26 +39,4 @@ which will use the default `models/config.py`.
 To try a trained model, you can simply use the provided generate script
 ```bash
 python generate.py
-```
-
-## Project Structure
-```
-nanoVLM
-├── data
-│   ├── collators.py
-│   ├── datasets.py
-│   └── processors.py
-├── models
-│   ├── __init__.py
-│   ├── config.py
-│   ├── lm.py
-│   ├── mp.py
-│   ├── README.md
-│   ├── utils.py
-│   ├── vit.py
-│   └── vlm.py
-├── README.md
-├── nanoVLM.ipynb
-├── generate.py
-└── train.py
 ```

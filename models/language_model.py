@@ -86,7 +86,7 @@ def apply_rotary_pos_embd(q, k, cos, sin, unsqeeze_dim=1):
 
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py#L214
 # https://github.com/huggingface/smollm/blob/main/vision/m4/models/vllama3/modeling_vllama3.py#L382
-class LMGroupedQueryAttention(nn.Module):
+class LanguageModelGroupedQueryAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
@@ -163,7 +163,7 @@ class LMGroupedQueryAttention(nn.Module):
         return y
 
 # https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py#L160
-class LMMLP(nn.Module):
+class LanguageModelMLP(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.embd_dim = cfg.lm_hidden_dim
@@ -182,11 +182,11 @@ class LMMLP(nn.Module):
         return x
 
 # https://github.com/meta-llama/llama3/blob/main/llama/model.py#L222
-class LMBlock(nn.Module):
+class LanguageModelBlock(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        self.mlp = LMMLP(cfg)
-        self.attn = LMGroupedQueryAttention(cfg)
+        self.mlp = LanguageModelMLP(cfg)
+        self.attn = LanguageModelGroupedQueryAttention(cfg)
         self.norm1 = RMSNorm(cfg) # Input Norm
         self.norm2 = RMSNorm(cfg) # Post Attention Norm
     
@@ -204,7 +204,7 @@ class LMBlock(nn.Module):
         return x
 
 # https://github.com/meta-llama/llama3/blob/main/llama/model.py#L251
-class LM(nn.Module):
+class LanguageModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
@@ -214,7 +214,7 @@ class LM(nn.Module):
         self.token_embedding = nn.Embedding(cfg.lm_vocab_size, cfg.lm_hidden_dim)
         self.rotary_embd = RotaryEmbedding(cfg)
         self.blocks = nn.ModuleList([
-            LMBlock(cfg) for _ in range(cfg.lm_n_blocks)
+            LanguageModelBlock(cfg) for _ in range(cfg.lm_n_blocks)
         ])
         self.norm = RMSNorm(cfg) # Final Norm
         self.head = nn.Linear(cfg.lm_hidden_dim, cfg.lm_vocab_size, bias=False)

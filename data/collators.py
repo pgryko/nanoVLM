@@ -1,6 +1,6 @@
 import torch
 
-class VAQCollator(object):
+class VAQCollator(object):  # Visual Question Answering Collator
     def __init__(self, tokenizer, max_length):
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -71,7 +71,7 @@ class VAQCollator(object):
             "labels": labels
         }
 
-class MMStarCollator(object):
+class MMStarCollator(object):  # https://huggingface.co/datasets/Lin-Chen/MMStar
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
     

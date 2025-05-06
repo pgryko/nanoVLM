@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from data.collators import VAQCollator, MMStarCollator
 from data.datasets import MMStarDataset, VQADataset
 from data.processors import get_image_processor, get_tokenizer
-from models.vlm import VLM
+from models.vision_language_model import VisionLanguageModel
 import models.config as config
 import models.utils as utils
 
@@ -125,12 +125,12 @@ def train(train_cfg, vlm_cfg):
 
     # Initialize model
     if train_cfg.resume_from_vlm_checkpoint:
-        model = VLM(vlm_cfg)
+        model = VisionLanguageModel(vlm_cfg)
         model.load_checkpoint(vlm_cfg.vlm_checkpoint_path)
     elif vlm_cfg.vlm_load_backbone_weights:
-        model = VLM.from_pretrained(vlm_cfg)
+        model = VisionLanguageModel.from_pretrained(vlm_cfg)
     else:
-        model = VLM(vlm_cfg)
+        model = VisionLanguageModel(vlm_cfg)
     
     print(f"nanoVLM initialized with {sum(p.numel() for p in model.parameters()):,} parameters") 
 

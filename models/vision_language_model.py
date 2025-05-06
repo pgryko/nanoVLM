@@ -1,18 +1,18 @@
-from models.vit import ViT
-from models.lm import LM
-from models.mp import MP
+from models.vision_transformer import ViT
+from models.language_model import LanguageModel
+from models.modality_projector import ModalityProjector
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class VLM(nn.Module):
+class VisionLanguageModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
         self.vision_encoder = ViT(cfg)
-        self.decoder = LM(cfg)
-        self.MP = MP(cfg)
+        self.decoder = LanguageModel(cfg)
+        self.MP = ModalityProjector(cfg)
 
     def forward(self, input_ids, image, attention_mask=None, targets=None):
         image_embd = self.vision_encoder(image)
@@ -104,6 +104,6 @@ class VLM(nn.Module):
     def from_pretrained(cls, cfg):
         model = cls(cfg)
         model.vision_encoder = ViT.from_pretrained(cfg)
-        model.decoder = LM.from_pretrained(cfg)
+        model.decoder = LanguageModel.from_pretrained(cfg)
 
         return model

@@ -2,7 +2,7 @@ import torch
 from PIL import Image
 from huggingface_hub import hf_hub_download
 
-from models.vlm import VLM
+from models.vision_language_model import VisionLanguageModel
 from models.config import VLMConfig
 from data.processors import get_tokenizer, get_image_processor
 
@@ -14,7 +14,7 @@ print(f"Using device: {device}")
 
 # Change to your own model path after training
 path_to_hf_file = hf_hub_download(repo_id="lusxvr/nanoVLM-256M", filename="nanoVLM-256M.pth")
-model = VLM(cfg).to(device)
+model = VisionLanguageModel(cfg).to(device)
 model.load_checkpoint(path_to_hf_file)
 model.eval()
 
