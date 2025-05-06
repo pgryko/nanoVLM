@@ -33,7 +33,8 @@ cd nanoVLM
 
 If you want to use `uv`:
 ```bash
-uv venv .venv --python 3.10
+uv init --bare
+uv sync --python 3.12
 source .venv/bin/activate
 uv add torch numpy torchvision pillow datasets huggingface-hub transformers
 ```
