@@ -6,7 +6,7 @@ from models.vision_language_model import VisionLanguageModel
 from models.config import VLMConfig
 from data.processors import get_tokenizer, get_image_processor
 
-# torch.manual_seed(0)
+torch.manual_seed(0)
 
 cfg = VLMConfig()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

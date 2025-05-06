@@ -23,10 +23,11 @@ If you don't want to do any setup at all, you can run the whole think in Google 
 
 Simply install these packages in your favourite environment manager:  
 ```bash
-pip install torch torchvision pillow datasets huggingface-hub transformers
+pip install torch numpy torchvision pillow datasets huggingface-hub transformers
 ```
 Dependencies: 
 - `torch` <3
+- `numpy` <3
 - `torchvision` for the image processors
 - `pillow` for image loading
 - `datasets` for the training datasets
@@ -45,4 +46,16 @@ which will use the default `models/config.py`.
 To try a trained model, you can simply use the provided generate script
 ```bash
 python generate.py
+```
+
+If we feed the example image in `assets/image.png` with a question into the model, we get the following output. Even after only short training, the model can recognize the cat in the picture. 
+```
+Input: 
+Image + 'What is this?'
+Output:
+Generation 1:  This is a cat sitting on the floor. I think this is a cat sat facing towards the left
+Generation 2:  The picture contains a white and brown cat sitting on the floor, platform, it is measuring 1
+Generation 3:  This is a cat which is sitting on the floor of the house. This cat wore a black and
+Generation 4:  This is a cute cat sitting on the surface of the mat. The background, which is blur,
+Generation 5:  This is a cat sitting on a rug, which is on the ground. The cat is in brown
 ```

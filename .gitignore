@@ -15,4 +15,8 @@ wandb/
 logs/
 *.csv
 
+.python-version
+pyproject.toml
+uv.lock
+
 .DS_Store

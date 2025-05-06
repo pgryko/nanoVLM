@@ -167,6 +167,7 @@ class ViT(nn.Module):
         
         return x
     
+    # Load the model from a pretrained HuggingFace model (we don't want to have to train the Vision Backbone from scratch)
     @classmethod
     def from_pretrained(cls, cfg):
         from transformers import SiglipVisionConfig

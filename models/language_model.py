@@ -239,7 +239,7 @@ class LanguageModel(nn.Module):
         
         B , T, _ = x.size()
         
-        # TODO: Implement position_id caching
+        # Note: You could also cache these input embeddings if you want to avoid recomputing them
         position_ids = torch.arange(T, device=x.device).unsqueeze(0).expand(B, -1) # Create position ids [0, 1, 2, ..., seq_len-1]
         cos, sin = self.rotary_embd(position_ids) # Get rotary position embeddings
 
@@ -274,16 +274,16 @@ class LanguageModel(nn.Module):
                 next_token_embedding = last_output.unsqueeze(1)  # Shape: [batch_size, 1, hidden_dim]
                 generated = torch.cat((generated, next_token_embedding), dim=1)
             
-            #TODO: Enable generation to break earlier than max_new_tokens
+            #Note: You could enable the generation to break earlier than max_new_tokens when it detects a eos token, but this does not work in batched generation (output tensors need to have the same size)
     
         return generated
 
+    # Load the model from a pretrained HuggingFace model (we don't want to have to train the Language Backbone from scratch)
     @classmethod
     def from_pretrained(cls, cfg):
         from transformers import AutoConfig
         from huggingface_hub import hf_hub_download
         import safetensors
-        import torch
         import torch.nn.init as init
                 
         # Load the HuggingFace config

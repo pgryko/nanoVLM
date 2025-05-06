@@ -69,7 +69,7 @@ class VisionLanguageModel(nn.Module):
         outputs = combined_embd
         generated_tokens = torch.zeros((batch_size, max_new_tokens), device=input_ids.device, dtype=input_ids.dtype)
         
-        #TODO: Add kv caching
+        #Note: Here you could implement improvements like e.g. KV caching
         for i in range(max_new_tokens):
             model_out = self.decoder(outputs, attention_mask)
             
@@ -86,7 +86,6 @@ class VisionLanguageModel(nn.Module):
             generated_tokens[:, i] = next_token.squeeze(-1)
             
             # Convert to embedding and append
-            # TODO: I am not sure if this should not be the fully contextualizes embedding
             next_embd = self.decoder.token_embedding(next_token)
             outputs = torch.cat((outputs, next_embd), dim=1)
 

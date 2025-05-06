@@ -1,5 +1,6 @@
 import re
 
+# Used to check our models performance on multiple choice tasks. This can also be done in a more involved way with e.g. LLM-as-a-judge
 def check_multiple_choice_with_regex(model_outputs, correct_answers):
     results = []
     for model_output, correct_answer in zip(model_outputs, correct_answers):
