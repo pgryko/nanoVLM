@@ -1,3 +1,4 @@
+import argparse
 import torch
 from PIL import Image
 from huggingface_hub import hf_hub_download
@@ -6,35 +7,80 @@ from models.vision_language_model import VisionLanguageModel
 from models.config import VLMConfig
 from data.processors import get_tokenizer, get_image_processor
 
-torch.manual_seed(0)
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#  added argparse flags:
+#     --checkpoint     Path to a local .pth model (falls back to HF hub if omitted)
+#     --image          Path to input image file i.e assets/image.png
+#     --prompt         Text prompt for the model
+#     --generations    Number of outputs to generate
+#     --max_new_tokens Maximum tokens per generation
+#  Wraps logic in main(), parses args, loads either local checkpoint or hub weights
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+   
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="generate text from image with nanoVLM"
+    )
+    parser.add_argument(
+        "--checkpoint", type=str, default=None,
+        help="path to a local .pth checkpoint (if provided). If omitted, model is loaded from HuggingFace Hub."
+    )
+    parser.add_argument(
+        "--image", type=str, default="assets/image.png",
+        help="path to input image"
+    )
+    parser.add_argument(
+        "--prompt", type=str, default="What is this?",
+        help="text prompt to feed the model"
+    )
+    parser.add_argument(
+        "--generations", type=int, default=5,
+        help="number of the generations to sample"
+    )
+    parser.add_argument(
+        "--max_new_tokens", type=int, default=20,
+        help="maximum number of tokens to generate"
+    )
+    return parser.parse_args()
 
-cfg = VLMConfig()
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
 
-# Change to your own model path after training
-path_to_hf_file = hf_hub_download(repo_id="lusxvr/nanoVLM-222M", filename="nanoVLM-222M.pth")
-model = VisionLanguageModel(cfg).to(device)
-model.load_checkpoint(path_to_hf_file)
-model.eval()
+def main():
+    args = parse_args()
 
-tokenizer = get_tokenizer(cfg.lm_tokenizer)
-image_processor = get_image_processor(cfg.vit_img_size)
+    cfg = VLMConfig()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-text = "What is this?"
-template = f"Question: {text} Answer:"
-encoded_batch = tokenizer.batch_encode_plus([template], return_tensors="pt")
-tokens = encoded_batch['input_ids'].to(device)
+    if args.checkpoint:
+        checkpoint_path = args.checkpoint
+    else:
+        checkpoint_path = hf_hub_download(
+            repo_id="lusxvr/nanoVLM-222M", filename="nanoVLM-222M.pth"
+        )
+    
+    model = VisionLanguageModel(cfg).to(device)
+    model.load_checkpoint(checkpoint_path)
+    model.eval()
 
-image_path = 'assets/image.png'
-image = Image.open(image_path)
-image = image_processor(image)
-image = image.unsqueeze(0).to(device)
+    tokenizer = get_tokenizer(cfg.lm_tokenizer)
+    image_processor = get_image_processor(cfg.vit_img_size)
 
-print("Input: ")
-print(f'{text}')
-print("Output:")
-num_generations = 5
-for i in range(num_generations):
-    gen = model.generate(tokens, image, max_new_tokens=20)
-    print(f"Generation {i+1}: {tokenizer.batch_decode(gen, skip_special_tokens=True)[0]}")
+    text = args.prompt
+    template = f"Question: {text} Answer:"
+    encoded = tokenizer.batch_encode_plus([template], return_tensors="pt")
+    tokens = encoded['input_ids'].to(device)
+
+    image = Image.open(args.image).convert("RGB")
+    image_tensor = image_processor(image).unsqueeze(0).to(device)
+
+    print("\nInput:")
+    print(text)
+    print("\nOutput:")
+    for i in range(args.generations):
+        gen_ids = model.generate(tokens, image_tensor, max_new_tokens=args.max_new_tokens)
+        output = tokenizer.batch_decode(gen_ids, skip_special_tokens=True)[0]
+        print(f"Generation {i+1}: {output}")
+
+
+if __name__ == "__main__":
+    main()
