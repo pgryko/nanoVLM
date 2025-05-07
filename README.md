@@ -36,12 +36,12 @@ If you want to use `uv`:
 uv init --bare
 uv sync --python 3.12
 source .venv/bin/activate
-uv add -r requirements.txt
+uv add torch numpy torchvision pillow datasets huggingface-hub transformers wandb
 ```
 
 If you prefer another environment manager, simply install these packages:  
 ```bash
-pip install -r requirements.txt
+pip install torch numpy torchvision pillow datasets huggingface-hub transformers wandb
 ```
 Dependencies: 
 - `torch` <3
