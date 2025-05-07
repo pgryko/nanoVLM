@@ -71,7 +71,7 @@ If we feed the example image in `assets/image.png` with a question into the mode
 Input: 
 Image + 'What is this?'
 Output:
-Generation 1:  This is a cat sitting on the floor. I think this is a cat sitting facing towards the left
+Generation 1:  This is a cat sitting on the floor. I think this is a cat sat facing towards the left
 Generation 2:  The picture contains a white and brown cat sitting on the floor, platform, it is measuring 1
 Generation 3:  This is a cat which is sitting on the floor of the house. This cat wore a black and
 Generation 4:  This is a cute cat sitting on the surface of the mat. The background, which is blur,
