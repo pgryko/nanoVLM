@@ -109,10 +109,10 @@ class LanguageModelGroupedQueryAttention(nn.Module):
         self.attn_dropout = nn.Dropout(self.dropout)
         self.resid_dropout = nn.Dropout(self.dropout)
 
-        # Use flash attention if available
-        self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
-        if not self.flash:
-            print("Warning: Flash attention not available, using standard attention in LM.")
+        # Use scaled dot product attention if available
+        self.sdpa = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
+        if not self.sdpa:
+            print("Warning: scaled dot product attention not available, using standard attention in LM.")
 
     def forward(self, x, cos, sin, attention_mask=None):
         B, T, C = x.size()
@@ -135,7 +135,7 @@ class LanguageModelGroupedQueryAttention(nn.Module):
             # Convert to attention mask where 0 keeps values and -inf masks
             attention_mask = (1.0 - attention_mask) * torch.finfo(q.dtype).min
 
-        if self.flash:
+        if self.sdpa:
             y = torch.nn.functional.scaled_dot_product_attention(
                 q, k, v,
                 attn_mask=attention_mask,
