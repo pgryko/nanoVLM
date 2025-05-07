@@ -71,11 +71,11 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 # Apply rotary position embeddings to queries and keys.
-def apply_rotary_pos_embd(q, k, cos, sin, unsqeeze_dim=1):
+def apply_rotary_pos_embd(q, k, cos, sin, unsqueeze_dim=1):
     # We need to make sure cos and sin can be properly broadcast
     # to the shape of q and k by adding the heads dimension
-    cos = cos.unsqueeze(unsqeeze_dim)  # [batch_size, 1, seq_len, head_dim]
-    sin = sin.unsqueeze(unsqeeze_dim)  # [batch_size, 1, seq_len, head_dim]
+    cos = cos.unsqueeze(unsqueeze_dim)  # [batch_size, 1, seq_len, head_dim]
+    sin = sin.unsqueeze(unsqueeze_dim)  # [batch_size, 1, seq_len, head_dim]
     
     # Apply complex multiplication:
     # (q * cos) + (rotate_half(q) * sin)
