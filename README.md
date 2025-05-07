@@ -78,7 +78,59 @@ Generation 4:  This is a cute cat sitting on the surface of the mat. The backgro
 Generation 5:  This is a cat sitting on a rug, which is on the ground. The cat is in brown
 ```
 
+## Hub integration
+
+**nanoVLM** comes with handy methods to load and save the model from the Hugging Face Hub.
+
+### Pretrained weights
+
+Here is how to load from a repo on the Hugging Face Hub. This is the recommended way to start working with the pretrained weights.
+
+```python
+# Load pretrained weights from Hub
+from models.vision_language_model import VisionLanguageModel
+
+model = VisionLanguageModel.from_pretrained("lusxvr/nanoVLM-222M")
+```
+
+### Push to hub
+
+Once you've trained a **nanoVLM** model, you might want to share it on the Hugging Face Hub. You can easily do that with:
+
+```python
+... # Load and train your model
+
+# Push it to `username/my-awesome-nanovlm-model` repo
+model.push_to_hub("my-awesome-nanovlm-model")
+```
+
+The model will be saved on the Hub as a config file `config.json` and a weights file `model.safetensors`. A modelcard `README.md` will also be generated for you with some high-level information. Feel free to update it manually to explain your work.
+
+If the repo does not exist, it will be created for you. By default the repo will be public. You can pass `private=True` if you don't want to share publicly.
+
+
+### Local save/load
+
+If you don't want to host your model on the Hugging Face Hub, it is still possible to save it locally:
+
+```python
+... # Load and train your model
+
+# Save it to a local folder
+model.save_pretrained("path/to/local/model")
+```
+
+You can then reload it from the local path:
+
+```python
+# Load pretrained weights from local path
+from models.vision_language_model import VisionLanguageModel
+
+model = VisionLanguageModel.from_pretrained("path/to/local/model")
+```
+
 ## Citation
+
 If you like the project and want to use it somewhere, please use this citation:
 ```
 @misc{wiedmann2025nanovlm,
