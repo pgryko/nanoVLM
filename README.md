@@ -17,10 +17,10 @@ Using the [`SigLIP-B/16-224-85M`](https://huggingface.co/google/siglip-base-patc
 
 ![loss](assets/nanoVLM-222M-loss.png)
 
-It is therefore a simple but yet powerful platform to get started with VLMs. Perfect to tinker around with different setups and setting, to explore the capabilities and efficiencies of small VLMs!
+It is therefore a simple yet powerful platform to get started with VLMs. Perfect to tinker around with different setups and settings, to explore the capabilities and efficiencies of small VLMs!
 
 ## Quick Start
-You can either clone the repository, setup an environement and start with the scripts, or directly [open in Colab](https://colab.research.google.com/github/huggingface/nanoVLM/blob/main/nanoVLM.ipynb). You can also use the [interactive notebook](./nanoVLM.ipynb) to get started!
+You can either clone the repository, setup an environment and start with the scripts, or directly [open in Colab](https://colab.research.google.com/github/huggingface/nanoVLM/blob/main/nanoVLM.ipynb). You can also use the [interactive notebook](./nanoVLM.ipynb) to get started!
 
 ## Environment Setup
 We really like `uv` and recommend using it as your package manager. But feel free to use any one that you prefer.
@@ -71,7 +71,7 @@ If we feed the example image in `assets/image.png` with a question into the mode
 Input: 
 Image + 'What is this?'
 Output:
-Generation 1:  This is a cat sitting on the floor. I think this is a cat sat facing towards the left
+Generation 1:  This is a cat sitting on the floor. I think this is a cat sitting facing towards the left
 Generation 2:  The picture contains a white and brown cat sitting on the floor, platform, it is measuring 1
 Generation 3:  This is a cat which is sitting on the floor of the house. This cat wore a black and
 Generation 4:  This is a cute cat sitting on the surface of the mat. The background, which is blur,
