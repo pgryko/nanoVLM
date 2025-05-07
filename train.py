@@ -7,7 +7,7 @@ from dataclasses import asdict
 from datasets import load_dataset, concatenate_datasets
 from torch.utils.data import DataLoader
 
-from data.collators import VAQCollator, MMStarCollator
+from data.collators import VQACollator, MMStarCollator
 from data.datasets import MMStarDataset, VQADataset
 from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
@@ -54,7 +54,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
     test_dataset = MMStarDataset(test_ds['val'], tokenizer, image_processor)
 
     # Create collators
-    vqa_collator = VAQCollator(tokenizer, vlm_cfg.lm_max_length)
+    vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length)
     mmstar_collator = MMStarCollator(tokenizer)
 
     # Create dataloaders
