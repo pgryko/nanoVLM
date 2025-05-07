@@ -36,12 +36,12 @@ If you want to use `uv`:
 uv init --bare
 uv sync --python 3.12
 source .venv/bin/activate
-uv add torch numpy torchvision pillow datasets huggingface-hub transformers
+uv add torch numpy torchvision pillow datasets huggingface-hub transformers wandb
 ```
 
 If you prefer another environment manager, simply install these packages:  
 ```bash
-pip install torch numpy torchvision pillow datasets huggingface-hub transformers
+pip install torch numpy torchvision pillow datasets huggingface-hub transformers wandb
 ```
 Dependencies: 
 - `torch` <3
@@ -50,11 +50,13 @@ Dependencies:
 - `pillow` for image loading
 - `datasets` for the training datasets
 - `huggingface-hub` & `transformers` to load the pretrained backbones
+- `wandb` for logging
 
 ## Training
 
 To train nanoVLM, you can simply use the provided training script
 ```bash
+wandb login --relogin
 python train.py
 ```
 which will use the default `models/config.py`.
