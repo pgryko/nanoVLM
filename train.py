@@ -74,7 +74,7 @@ def get_run_name(train_cfg):
 def get_dataloaders(train_cfg, vlm_cfg):
     # Create datasets
     image_processor = get_image_processor(vlm_cfg.vit_img_size)
-    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer)
+    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens)
 
     # Load and combine all training datasets
     combined_train_data = []
@@ -198,7 +198,7 @@ def get_lr(it, max_lr, max_steps):
 
 def train(train_cfg, vlm_cfg):
     train_loader, val_loader, test_loader = get_dataloaders(train_cfg, vlm_cfg)
-    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer)
+    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens)
 
     total_dataset_size = len(train_loader.dataset)
     if train_cfg.log_wandb and is_master():

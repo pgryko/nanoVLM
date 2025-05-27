@@ -48,7 +48,7 @@ def main():
     model = VisionLanguageModel.from_pretrained(source).to(device)
     model.eval()
 
-    tokenizer = get_tokenizer(model.cfg.lm_tokenizer)
+    tokenizer = get_tokenizer(model.cfg.lm_tokenizer, model.cfg.vlm_extra_tokens)
     image_processor = get_image_processor(model.cfg.vit_img_size)
 
     template = f"Question: {args.prompt} Answer:"
