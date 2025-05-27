@@ -82,7 +82,7 @@ def measure_vram(args, vlm_cfg, train_cfg_defaults):
         return
 
     processed_base_dataset = VQADataset(base_ds_for_vram_test, tokenizer, image_processor)
-    vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length)
+    vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length, vlm_cfg.IMAGE_TOKEN_LENGTH)
 
     print("\n--- VRAM Measurement ---")
     results = {}

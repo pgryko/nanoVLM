@@ -29,7 +29,7 @@ class VLMConfig:
     lm_attn_scaling: float = 1.0
     IMAGE_TOKEN_LENGTH: int = 49
     TOTAL_SEQUENCE_LENGTH: int = 128
-    lm_max_length: int = TOTAL_SEQUENCE_LENGTH - IMAGE_TOKEN_LENGTH  # Maximum length for the language model, derived from TOTAL_SEQUENCE_LENGTH and IMAGE_TOKEN_LENGTH
+    lm_max_length: int = TOTAL_SEQUENCE_LENGTH # - IMAGE_TOKEN_LENGTH If using replacement image tokens, we don't need to substract them here anymore # Maximum length for the language model, derived from TOTAL_SEQUENCE_LENGTH and IMAGE_TOKEN_LENGTH
     lm_use_tokens: bool = False # Decide if the LM expects tokens or embeddings as input (if using as a backbone for the VLM, set to False)
     lm_tie_weights: bool = True # Decide if you want to tie the LM Head weight to the token embedding weights
     lm_model_type: str = 'HuggingFaceTB/SmolLM2-135M'

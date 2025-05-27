@@ -10,7 +10,6 @@ def get_tokenizer(name, extra_special_tokens=None):
             tokenizer_init_kwargs["extra_special_tokens"] = extra_special_tokens
         tokenizer = AutoTokenizer.from_pretrained(name, **tokenizer_init_kwargs,)
         tokenizer.pad_token = tokenizer.eos_token
-        print(tokenizer.special_tokens_map)
         TOKENIZERS_CACHE[name] = tokenizer
     return TOKENIZERS_CACHE[name]
 

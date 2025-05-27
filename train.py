@@ -100,7 +100,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
     test_dataset = MMStarDataset(test_ds['val'], tokenizer, image_processor)
 
     # Create collators
-    vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length)
+    vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length, vlm_cfg.IMAGE_TOKEN_LENGTH)
     mmstar_collator = MMStarCollator(tokenizer)
 
     g = torch.Generator()
