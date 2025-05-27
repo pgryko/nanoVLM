@@ -53,7 +53,7 @@ class VQACollator(object):  # Visual Question Answering Collator
             # Case 1: If sequence was truncated (original is longer than max_length)
             if original_lengths[i] > self.max_length:
                 labels[i, :] = -100 # Ignore this sample entirely
-                print(f"Sample {i} truncated: original length {original_lengths[i]} exceeds max_length {self.max_length}. Ignoring sample.")
+                # print(f"Sample {i} truncated: original length {original_lengths[i]} exceeds max_length {self.max_length}. Ignoring sample.")
                 continue
             
             # Case 2: Sequence fits within max_length

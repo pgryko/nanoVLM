@@ -11,6 +11,8 @@ from models.language_model import LanguageModel
 from models.modality_projector import ModalityProjector
 from models.config import VLMConfig
 
+from data.processors import get_tokenizer
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -29,32 +31,66 @@ class VisionLanguageModel(nn.Module):
             self.decoder = LanguageModel(cfg)
         self.MP = ModalityProjector(cfg)
         self.load_backbone = load_backbone
+        self.tokenizer = get_tokenizer(cfg.lm_tokenizer, cfg.vlm_extra_tokens)
 
     def forward(self, input_ids, image, attention_mask=None, targets=None):
         image_embd = self.vision_encoder(image)
-        image_embd = self.MP(image_embd)
+        image_embd = self.MP(image_embd) # [B, IMAGE_TOKEN_LENGTH, D_lm]
 
-        token_embd = self.decoder.token_embedding(input_ids)
+        token_embd = self.decoder.token_embedding(input_ids) # [B, T_sequence, D_lm]
 
-        combined_embd = torch.cat((image_embd, token_embd), dim=1) # Concatenate image embeddings to token embeddings
+        # Identify image token placeholder positions and replace their embeddings
+        # and cfg.IMAGE_TOKEN_LENGTH is the number of image tokens to replace.
+        image_token_id = self.tokenizer.image_token_id 
         
-        # Adjust attention mask to account for image tokens
-        if attention_mask is not None:
-            # Create mask of 1s for image tokens (all image tokens should be attended to)
-            batch_size = image_embd.size(0)
-            img_seq_len = image_embd.size(1)
-            image_attention_mask = torch.ones((batch_size, img_seq_len), device=attention_mask.device, dtype=attention_mask.dtype)
-            
-            # Combine image and token attention masks
-            attention_mask = torch.cat((image_attention_mask, attention_mask), dim=1)
+        # For each item in the batch, find the start of the image token sequence
+        # We expect cfg.IMAGE_TOKEN_LENGTH consecutive image_token_id
+        # We also expect a BOI and EOI token, but we only replace the image_token_id ones.
+        # The collator should ensure input_ids has self.cfg.IMAGE_TOKEN_LENGTH placeholders
+        
+        updated_token_embd = token_embd.clone()
 
-        logits, _ = self.decoder(combined_embd, attention_mask=attention_mask) # Not logits yet, but easier to return like this
+        for i in range(input_ids.size(0)):
+            # Find the first occurrence of image_token_id, this should be after boi_token
+            img_token_indices = (input_ids[i] == image_token_id).nonzero(as_tuple=True)[0]
+            
+            if len(img_token_indices) >= self.cfg.IMAGE_TOKEN_LENGTH:
+                start_idx = img_token_indices[0]
+                # Replace the embeddings of the image placeholder tokens with the actual image embeddings
+                updated_token_embd[i, start_idx : start_idx + self.cfg.IMAGE_TOKEN_LENGTH, :] = image_embd[i]
+            else:
+                # This case should ideally not happen if collator and config are correct
+                # Consider raising an error or specific handling
+                print(f"Warning: Not enough image token placeholders found in sample {i} for replacement.")
+                # Fallback or error: for now, we'll proceed but this might lead to issues.
+                # A robust implementation might pad/truncate image_embd or raise an error.
+                # For simplicity, if fewer placeholders, it will use fewer image embeddings.
+                # If more placeholders, it will only fill up to image_embd length.
+                # This part needs careful consideration based on expected behavior.
+                # For now, let's assume cfg.IMAGE_TOKEN_LENGTH matches image_embd.size(1)
+                # and the collator provides at least that many placeholders.
+                
+                # A simple approach: if not enough placeholders, we might have a problem.
+                # If image_embd has more features than placeholders, that's also an issue.
+                # Let's assume they match as per cfg.IMAGE_TOKEN_LENGTH.
+                
+                # Correct replacement logic:
+                # Ensure we don't go out of bounds for both updated_token_embd and image_embd
+                num_tokens_to_replace = min(len(img_token_indices), self.cfg.IMAGE_TOKEN_LENGTH, image_embd.size(1))
+                if num_tokens_to_replace > 0 and len(img_token_indices) > 0:
+                    start_idx = img_token_indices[0]
+                    updated_token_embd[i, start_idx : start_idx + num_tokens_to_replace, :] = image_embd[i, :num_tokens_to_replace, :]
+
+
+        # The combined_embd is now the token_embd with image parts replaced.
+        # The attention_mask comes from the collator and should already cover the full sequence.
+        logits, _ = self.decoder(updated_token_embd, attention_mask=attention_mask)
 
         loss = None
         if targets is not None:
-            # Only use the token part of the logits for loss computation
-            logits = self.decoder.head(logits)
-            logits = logits[:, image_embd.size(1):, :]
+            logits = self.decoder.head(logits) # Apply LM head
+            # Loss is calculated over all tokens, but `targets` (labels) will have -100 for non-answer tokens.
+            # No need to slice logits based on image embedding size here, as the target mask handles it.
             loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets.reshape(-1), ignore_index=-100)
 
         return logits, loss
@@ -63,29 +99,41 @@ class VisionLanguageModel(nn.Module):
     def generate(self, input_ids, image, attention_mask=None, max_new_tokens=5, top_k=50, top_p=0.9, temperature=0.5, greedy=False, use_kv_cache: bool = True):
 
         # 1. Process image
-        image_embd = self.vision_encoder(image) # [B, T_img, D_model]
-        image_embd = self.MP(image_embd)      # [B, T_img, D_lm]
+        image_embd = self.vision_encoder(image) # [B, T_img_feat, D_model]
+        image_embd = self.MP(image_embd)      # [B, IMAGE_TOKEN_LENGTH, D_lm]
 
         # 2. Embed initial text prompt tokens
         prompt_token_embeds = self.decoder.token_embedding(input_ids) # [B, T_prompt_text, D_lm]
-
-        # 3. Combine image and text prompt embeddings for prefill
-        initial_combined_embeds = torch.cat((image_embd, prompt_token_embeds), dim=1) # [B, T_img + T_prompt_text, D_lm]
-        current_total_seq_len = initial_combined_embeds.size(1)
-
-        batch_size = image_embd.size(0)
-        if attention_mask is not None:
-            # Create mask of 1s for image tokens (all image tokens should be attended to)
-            img_seq_len = image_embd.size(1)
-            image_attention_mask = torch.ones((batch_size, img_seq_len), device=attention_mask.device, dtype=attention_mask.dtype)
-            
-            # Combine image and token attention masks
-            attention_mask = torch.cat((image_attention_mask, attention_mask), dim=1)
         
+        # Replace image token placeholders in prompt_token_embeds with image_embd
+        image_token_id = self.tokenizer.image_token_id
+        
+        initial_combined_embeds = prompt_token_embeds.clone()
+
+        for i in range(input_ids.size(0)):
+            img_token_indices = (input_ids[i] == image_token_id).nonzero(as_tuple=True)[0]
+            if len(img_token_indices) >= self.cfg.IMAGE_TOKEN_LENGTH:
+                start_idx = img_token_indices[0]
+                initial_combined_embeds[i, start_idx : start_idx + self.cfg.IMAGE_TOKEN_LENGTH, :] = image_embd[i]
+            else:
+                # Handle cases with insufficient placeholders, similar to forward method
+                print(f"Warning: Not enough image token placeholders in generate prompt for sample {i}.")
+                num_tokens_to_replace = min(len(img_token_indices), self.cfg.IMAGE_TOKEN_LENGTH, image_embd.size(1))
+                if num_tokens_to_replace > 0 and len(img_token_indices) > 0:
+                     start_idx = img_token_indices[0]
+                     initial_combined_embeds[i, start_idx:start_idx + num_tokens_to_replace, :] = image_embd[i, :num_tokens_to_replace, :]
+
+
+        current_total_seq_len = initial_combined_embeds.size(1)
+        batch_size = image_embd.size(0) # Or initial_combined_embeds.size(0)
+        
+        # The attention_mask from input should correspond to input_ids and already be correct.
+        # No explicit concatenation needed here if collator prepares it correctly.
+
         # --- Multimodal Prefill Phase ---
         prefill_output, kv_cache_list = self.decoder(
             initial_combined_embeds,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask, # Use the provided attention mask
             kv_cache=None,
             start_pos=0
         )
