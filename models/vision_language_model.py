@@ -39,47 +39,48 @@ class VisionLanguageModel(nn.Module):
 
         token_embd = self.decoder.token_embedding(input_ids) # [B, T_sequence, D_lm]
 
-        # Identify image token placeholder positions and replace their embeddings
-        # and cfg.IMAGE_TOKEN_LENGTH is the number of image tokens to replace.
-        image_token_id = self.tokenizer.image_token_id 
-        
-        # For each item in the batch, find the start of the image token sequence
-        # We expect cfg.IMAGE_TOKEN_LENGTH consecutive image_token_id
-        # We also expect a BOI and EOI token, but we only replace the image_token_id ones.
-        # The collator should ensure input_ids has self.cfg.IMAGE_TOKEN_LENGTH placeholders
-        
         updated_token_embd = token_embd.clone()
+        
+        image_token_id = self.tokenizer.image_token_id
+        num_configured_image_tokens = self.cfg.IMAGE_TOKEN_LENGTH
+        device = input_ids.device
+        batch_size = input_ids.size(0)
 
-        for i in range(input_ids.size(0)):
-            # Find the first occurrence of image_token_id, this should be after boi_token
-            img_token_indices = (input_ids[i] == image_token_id).nonzero(as_tuple=True)[0]
+        # Create a mask for locations of the image placeholder token
+        is_image_placeholder_mask = (input_ids == image_token_id)
+        
+        # Count the number of image placeholder tokens in each batch item
+        num_image_tokens_per_row = is_image_placeholder_mask.sum(dim=1)
+        
+        # Identify rows that have at least the configured number of image tokens
+        valid_rows_mask = (num_image_tokens_per_row >= num_configured_image_tokens)
+        
+        # Get the batch indices of these valid rows
+        actual_batch_indices_to_update = valid_rows_mask.nonzero(as_tuple=True)[0]
+
+        if actual_batch_indices_to_update.numel() > 0:
+            # Select the relevant parts of input_ids and image_embd for these valid rows
+            relevant_input_ids = input_ids[actual_batch_indices_to_update]
+            relevant_image_embd = image_embd[actual_batch_indices_to_update]
             
-            if len(img_token_indices) >= self.cfg.IMAGE_TOKEN_LENGTH:
-                start_idx = img_token_indices[0]
-                # Replace the embeddings of the image placeholder tokens with the actual image embeddings
-                updated_token_embd[i, start_idx : start_idx + self.cfg.IMAGE_TOKEN_LENGTH, :] = image_embd[i]
-            else:
-                # This case should ideally not happen if collator and config are correct
-                # Consider raising an error or specific handling
-                print(f"Warning: Not enough image token placeholders found in sample {i} for replacement.")
-                # Fallback or error: for now, we'll proceed but this might lead to issues.
-                # A robust implementation might pad/truncate image_embd or raise an error.
-                # For simplicity, if fewer placeholders, it will use fewer image embeddings.
-                # If more placeholders, it will only fill up to image_embd length.
-                # This part needs careful consideration based on expected behavior.
-                # For now, let's assume cfg.IMAGE_TOKEN_LENGTH matches image_embd.size(1)
-                # and the collator provides at least that many placeholders.
-                
-                # A simple approach: if not enough placeholders, we might have a problem.
-                # If image_embd has more features than placeholders, that's also an issue.
-                # Let's assume they match as per cfg.IMAGE_TOKEN_LENGTH.
-                
-                # Correct replacement logic:
-                # Ensure we don't go out of bounds for both updated_token_embd and image_embd
-                num_tokens_to_replace = min(len(img_token_indices), self.cfg.IMAGE_TOKEN_LENGTH, image_embd.size(1))
-                if num_tokens_to_replace > 0 and len(img_token_indices) > 0:
-                    start_idx = img_token_indices[0]
-                    updated_token_embd[i, start_idx : start_idx + num_tokens_to_replace, :] = image_embd[i, :num_tokens_to_replace, :]
+            # For these valid rows, find the starting index of the first image placeholder token
+            # argmax on the mask for rows known to contain the token.
+            relevant_is_image_placeholder_mask = (relevant_input_ids == image_token_id)
+            start_indices_for_update = relevant_is_image_placeholder_mask.int().argmax(dim=1)
+            
+            # Prepare row and column selectors for advanced indexing
+            # Row selector for updated_token_embd: repeats the actual batch indices
+            row_selector = actual_batch_indices_to_update.unsqueeze(1).expand(-1, num_configured_image_tokens)
+            
+            # Column selector for updated_token_embd: for each valid row, specifies the range of columns
+            # [start_idx, start_idx + 1, ..., start_idx + num_configured_image_tokens - 1]
+            col_offsets = torch.arange(num_configured_image_tokens, device=device).unsqueeze(0)
+            col_selector = start_indices_for_update.unsqueeze(1) + col_offsets
+            
+            # Perform the vectorized replacement
+            # updated_token_embd[rows, cols, :] = values
+            # where rows and cols select the specific [Batch, Token_Position] locations
+            updated_token_embd[row_selector, col_selector, :] = relevant_image_embd.to(updated_token_embd.dtype)
 
 
         # The combined_embd is now the token_embd with image parts replaced.
