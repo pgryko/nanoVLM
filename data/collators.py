@@ -5,7 +5,7 @@ class VQACollator(object):  # Visual Question Answering Collator
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.image_token_length = image_token_length
-        # Assuming tokenizer has these attributes after being set up with special tokens
+
         self.boi_token_str = tokenizer.boi_token 
         self.eoi_token_str = tokenizer.eoi_token
         self.image_token_str = tokenizer.image_token
@@ -87,8 +87,13 @@ class VQACollator(object):  # Visual Question Answering Collator
         }
 
 class MMStarCollator(object):  # https://huggingface.co/datasets/Lin-Chen/MMStar
-    def __init__(self, tokenizer):
+    def __init__(self, tokenizer, image_token_length):
         self.tokenizer = tokenizer
+        self.image_token_length = image_token_length
+
+        self.boi_token_str = tokenizer.boi_token 
+        self.eoi_token_str = tokenizer.eoi_token
+        self.image_token_str = tokenizer.image_token
     
     def __call__(self, batch):
         images = [item["image"] for item in batch]
@@ -97,9 +102,16 @@ class MMStarCollator(object):  # https://huggingface.co/datasets/Lin-Chen/MMStar
 
         # Stack images
         images = torch.stack(images)
+
+        # Create input sequences with image placeholders
+        question_sequences = []
+        image_segment_str = self.image_token_str * self.image_token_length
+        for question_text in questions:
+            question_sequences.append(f"{self.boi_token_str}{image_segment_str}{self.eoi_token_str}{question_text}")
+        
         
         encoded_question_sequences = self.tokenizer.batch_encode_plus(
-            questions,
+            question_sequences,
             padding=True,
             padding_side="left",
             return_tensors="pt"
