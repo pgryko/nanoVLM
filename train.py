@@ -319,7 +319,7 @@ def train(train_cfg, vlm_cfg):
             total_train_loss += batch_loss
 
             num_tokens = torch.sum(attention_mask).item() # Sum of attention mask gives number of tokens
-            num_tokens += images.shape[0] * ((images.shape[2] / vlm_cfg.vit_patch_size) ** 2) / (vlm_cfg.mp_pixel_shuffle_factor ** 2) # Add image tokens = batch_size * (((img_size / patch_size) ** 2) / (pixel_shuffle_factor ** 2))
+            # num_tokens += images.shape[0] * ((images.shape[2] / vlm_cfg.vit_patch_size) ** 2) / (vlm_cfg.mp_pixel_shuffle_factor ** 2) # Add image tokens = batch_size * (((img_size / patch_size) ** 2) / (pixel_shuffle_factor ** 2))
             total_tokens_processed += num_tokens
 
             batch_end_time = time.time()

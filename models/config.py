@@ -41,7 +41,7 @@ class VLMConfig:
     vlm_extra_tokens: dict[str, str] = field(default_factory=lambda: {"image_token": "<|image|>", "boi_token": "<|image_start|>", "eoi_token": "<|image_end|>"})
     vlm_load_backbone_weights: bool = True
     vlm_checkpoint_path: str = 'checkpoints'
-    hf_repo_name: str = 'nanoVLM'
+    hf_repo_name: str = None #'nanoVLM'
 
 
 @dataclass
