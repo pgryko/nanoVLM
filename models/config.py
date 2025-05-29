@@ -51,9 +51,9 @@ class TrainConfig:
     data_cutoff_idx: int = None
     val_ratio: float = 0.025
     batch_size: int = 256
-    gradient_accumulation_steps: int = 1
+    gradient_accumulation_steps: int = 8
     mmstar_batch_size: int = 32
-    max_grad_norm: float = None
+    max_grad_norm: float = 1.0
     eval_in_epochs: bool = True
     eval_interval: int = 250
     epochs: int = 5
