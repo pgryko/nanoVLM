@@ -269,6 +269,7 @@ def train(train_cfg, vlm_cfg):
         optimizer.zero_grad()
 
         for i, batch in enumerate(train_loader):
+            is_update_step = (i + 1) % train_cfg.gradient_accumulation_steps == 0 or i + 1 == len(train_loader)
             batch_start_time = time.time()
             images = batch["image"].to(device)
             input_ids = batch["input_ids"].to(device)
@@ -302,7 +303,7 @@ def train(train_cfg, vlm_cfg):
 
             loss.backward()
 
-            if (i + 1) % train_cfg.gradient_accumulation_steps == 0 or i + 1 == len(train_loader):
+            if is_update_step:
                 if train_cfg.max_grad_norm is not None:
                     grad_norm = torch.nn.utils.clip_grad_norm_(all_params, max_norm=train_cfg.max_grad_norm)
 
@@ -319,7 +320,6 @@ def train(train_cfg, vlm_cfg):
             total_train_loss += batch_loss
 
             num_tokens = torch.sum(attention_mask).item() # Sum of attention mask gives number of tokens
-            # num_tokens += images.shape[0] * ((images.shape[2] / vlm_cfg.vit_patch_size) ** 2) / (vlm_cfg.mp_pixel_shuffle_factor ** 2) # Add image tokens = batch_size * (((img_size / patch_size) ** 2) / (pixel_shuffle_factor ** 2))
             total_tokens_processed += num_tokens
 
             batch_end_time = time.time()
@@ -330,7 +330,7 @@ def train(train_cfg, vlm_cfg):
             batch_loss = mean(dist_gather(batch_loss)) if is_dist() else batch_loss  
             tokens_per_second = sum(dist_gather(tokens_per_second)) if is_dist() else tokens_per_second  
 
-            if train_cfg.eval_in_epochs and global_step % train_cfg.eval_interval == 0: #and is_master():
+            if train_cfg.eval_in_epochs and global_step % train_cfg.eval_interval == 0 and is_update_step:
                 model.eval()
                 if device == "cuda":
                     torch.cuda.empty_cache()
@@ -369,10 +369,10 @@ def train(train_cfg, vlm_cfg):
                 run.log({
                     "batch_loss": batch_loss,
                     "tokens_per_second": tokens_per_second,
-                    **({"grad_norm": grad_norm} if train_cfg.max_grad_norm is not None and ((i + 1) % train_cfg.gradient_accumulation_steps == 0 or i + 1 == len(train_loader)) else {})
+                    **({"grad_norm": grad_norm} if train_cfg.max_grad_norm is not None and is_update_step else {})
                 }, step=global_step)
                 
-            if (i + 1) % train_cfg.gradient_accumulation_steps == 0 or i + 1 == len(train_loader):
+            if is_update_step:
                 global_step += 1
 
         avg_train_loss = total_train_loss / len(train_loader)
