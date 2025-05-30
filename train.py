@@ -143,7 +143,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
         collate_fn=vqa_collator,
         num_workers=8,
         pin_memory=True,
-        drop_last=True,
+        drop_last=False,  # Changed to False to handle small validation sets
         worker_init_fn=seed_worker,
         generator=g,
     )
@@ -209,6 +209,10 @@ def train(train_cfg, vlm_cfg):
         run_name = get_run_name(train_cfg, vlm_cfg)
         if train_cfg.data_cutoff_idx is None:
             run_name = run_name.replace("full_ds", f"{total_dataset_size}samples")
+
+        if os.getenv("WANDB_API_KEY") is not None:
+            wandb.login(key=os.getenv("WANDB_API_KEY")) # add this line to force wandb to login, otherwise it will throw an error that do not have permission to upsert bucket.
+
         run = wandb.init(
             entity=train_cfg.wandb_entity,
             project="nanoVLM",
@@ -347,7 +351,7 @@ def train(train_cfg, vlm_cfg):
                             _, loss = model(input_ids, images, attention_mask=attention_mask, targets=labels)
 
                         total_val_loss += loss.item()
-                    avg_val_loss = total_val_loss / len(val_loader)
+                    avg_val_loss = total_val_loss / len(val_loader) if len(val_loader) > 0 else 0
                     avg_val_loss = mean(dist_gather(avg_val_loss)) if is_dist() else avg_val_loss
                     if train_cfg.log_wandb and is_master():
                         run.log({"val_loss": avg_val_loss}, step=global_step)
@@ -365,7 +369,7 @@ def train(train_cfg, vlm_cfg):
                                 model=eval_model,
                                 tokenizer=tokenizer,
                                 image_processor=image_processor,
-                                tasks=train_cfg.lmms_eval_tasks,
+                                tasks=list(train_cfg.lmms_eval_tasks),
                                 device=device,
                                 batch_size=train_cfg.lmms_eval_batch_size,
                                 limit=train_cfg.lmms_eval_limit,

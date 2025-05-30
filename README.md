@@ -72,6 +72,8 @@ Dependencies:
 To train nanoVLM, you can simply use the provided training script. After training, your model gets uploaded to the Hub!
 ```bash
 wandb login --relogin
+export WANDB_API_KEY="PLACEHOLDER" # Replace with your actual API key
+
 huggingface-cli login
 python train.py
 ```
@@ -110,7 +112,7 @@ nanoVLM now supports evaluation using the comprehensive lmms-eval toolkit:
 pip install lmms-eval
 
 # Evaluate a trained model on multiple benchmarks
-python evaluate_with_lmms.py --model_path lusxvr/nanoVLM-222M --tasks mmstar,mme,gqa,vqav2
+python evaluate_with_lmms.py --model_path lusxvr/nanoVLM-222M --tasks mmstar,mme
 
 # Enable lmms-eval during training for intermediate evaluation
 python train.py  # with use_lmms_eval=True in TrainConfig
