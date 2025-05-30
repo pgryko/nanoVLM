@@ -32,6 +32,18 @@ class NanoVLMWrapper(lmms):
         self.device = device
         self.batch_size = batch_size
         
+        # Set world_size and rank for non-distributed evaluation
+        self._world_size = 1
+        self._rank = 0
+        
+        # Add dummy accelerator for lmms-eval compatibility
+        # This prevents errors when using "accelerate" backend
+        class DummyAccelerator:
+            def wait_for_everyone(self):
+                pass
+        
+        self.accelerator = DummyAccelerator()
+        
         # Get tokenizer and image processor from model config if not provided
         if tokenizer is None:
             self.tokenizer = get_tokenizer(model.cfg.lm_tokenizer)

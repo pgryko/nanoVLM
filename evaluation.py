@@ -72,8 +72,18 @@ def run_lmms_evaluation(
     # Create model args string
     model_args = f"device={device}"
 
+    # Create a simple args object with the necessary attributes
+    class SimpleArgs:
+        def __init__(self):
+            self.process_with_media = True  # Set to True for VLM tasks
+    
+    cli_args = SimpleArgs()
+    
     # Run evaluation
     try:
+        # Debug: check distributed_executor_backend
+        logger.info(f"Using distributed_executor_backend: accelerate")
+        
         results = evaluator.simple_evaluate(
             model=wrapped_model,
             model_args=model_args,
@@ -85,6 +95,8 @@ def run_lmms_evaluation(
             log_samples=log_samples,
             task_manager=task_manager,
             verbosity=verbosity,
+            cli_args=cli_args,
+            distributed_executor_backend="accelerate",
         )
         
         # Save results if output path is provided
@@ -99,6 +111,8 @@ def run_lmms_evaluation(
         
     except Exception as e:
         logger.error(f"Error during lmms evaluation: {e}")
+        import traceback
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
         return {}
 
 
