@@ -46,12 +46,12 @@ class VLMConfig:
 
 @dataclass
 class TrainConfig:
-    lr_mp: float = 2e-3
-    lr_backbones: float = 1e-4
+    lr_mp: float = 3e-3
+    lr_backbones: float = 6e-4
     data_cutoff_idx: int = None
-    val_ratio: float = 0.025
+    val_ratio: float = 0.05
     batch_size: int = 256
-    gradient_accumulation_steps: int = 8
+    gradient_accumulation_steps: int = 1
     mmstar_batch_size: int = 32
     max_grad_norm: float = 1.0
     eval_in_epochs: bool = True
