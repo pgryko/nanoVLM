@@ -25,3 +25,4 @@ checkpoints/
 notebooks/
 *.slurm
 CLAUDE.md
+.vscode
