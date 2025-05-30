@@ -49,11 +49,11 @@ class TrainConfig:
     lr_mp: float = 3e-3
     lr_backbones: float = 6e-4
     data_cutoff_idx: int = None
-    val_ratio: float = 0.05
+    val_ratio: float = 0.025
     batch_size: int = 256
     gradient_accumulation_steps: int = 1
     mmstar_batch_size: int = 32
-    max_grad_norm: float = 1.0
+    max_grad_norm: float = None
     eval_in_epochs: bool = True
     eval_interval: int = 250
     epochs: int = 5
