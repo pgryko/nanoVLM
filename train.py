@@ -369,7 +369,7 @@ def train(train_cfg, vlm_cfg):
                 run.log({
                     "batch_loss": batch_loss,
                     "tokens_per_second": tokens_per_second,
-                    **({"grad_norm": grad_norm} if train_cfg.max_grad_norm is not None else {})
+                    **({"grad_norm": grad_norm} if train_cfg.max_grad_norm is not None and ((i + 1) % train_cfg.gradient_accumulation_steps == 0 or i + 1 == len(train_loader)) else {})
                 }, step=global_step)
                 
             if (i + 1) % train_cfg.gradient_accumulation_steps == 0 or i + 1 == len(train_loader):
