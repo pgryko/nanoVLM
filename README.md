@@ -31,6 +31,21 @@ It is therefore a simple yet powerful platform to get started with VLMs. Perfect
 
 You can either clone the repository, setup an environment and start with the scripts, or directly [open in Colab](https://colab.research.google.com/github/huggingface/nanoVLM/blob/main/nanoVLM.ipynb). You can also use the [interactive notebook](./nanoVLM.ipynb) to get started!
 
+### Evaluation with lmms-eval
+
+nanoVLM now supports evaluation using the comprehensive lmms-eval toolkit:
+
+```bash
+# Install lmms-eval (optional)
+pip install lmms-eval
+
+# Evaluate a trained model on multiple benchmarks
+CUDA_VISIBLE_DEVICES=7 python evaluate_with_lmms.py --model_path lusxvr/nanoVLM-222M --tasks mmstar,mme,gqa,vqav2
+
+# Enable lmms-eval during training for intermediate evaluation
+python train.py  # with use_lmms_eval=True in TrainConfig
+```
+
 
 ## Environment Setup
 
@@ -48,11 +63,15 @@ uv init --bare --python 3.12
 uv sync --python 3.12
 source .venv/bin/activate
 uv add torch numpy torchvision pillow datasets huggingface-hub transformers wandb
+# Optional: for lmms-eval integration
+uv add lmms-eval
 ```
 
 If you prefer another environment manager, simply install these packages:  
 ```bash
 pip install torch numpy torchvision pillow datasets huggingface-hub transformers wandb
+# Optional: for lmms-eval integration  
+pip install lmms-eval
 ```
 Dependencies: 
 - `torch` <3
