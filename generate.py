@@ -45,21 +45,15 @@ def main():
 
     source = args.checkpoint if args.checkpoint else args.hf_model
     print(f"Loading weights from: {source}")
-    # model = VisionLanguageModel.from_pretrained(source).to(device)
-    import models.config as cfg
-    vlm_config = cfg.VLMConfig()
-    train_config = cfg.TrainConfig()
-    model = VisionLanguageModel(vlm_config, load_backbone=vlm_config.vlm_load_backbone_weights).to(device)
-
+    model = VisionLanguageModel.from_pretrained(source).to(device)
     model.eval()
 
     tokenizer = get_tokenizer(model.cfg.lm_tokenizer, model.cfg.vlm_extra_tokens)
     image_processor = get_image_processor(model.cfg.vit_img_size)
 
-    image_segment_str = tokenizer.image_token * vlm_config.IMAGE_TOKEN_LENGTH
-    question_string = f"{tokenizer.boi_token}{image_segment_str}{tokenizer.eoi_token}{args.prompt}"
+    image_segment_str = tokenizer.boi_token + tokenizer.image_token * model.cfg.IMAGE_TOKEN_LENGTH + tokenizer.eoi_token
 
-    template = f"Question: {question_string} Answer:"
+    template = f"{image_segment_str} Question: {args.prompt} Answer:"
     encoded = tokenizer.batch_encode_plus([template], return_tensors="pt")
     tokens = encoded["input_ids"].to(device)
 
