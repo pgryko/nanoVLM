@@ -67,7 +67,7 @@ def get_run_name(train_cfg, vlm_cfg):
     epochs = f"ep{train_cfg.epochs}"
     learning_rate = f"lr{train_cfg.lr_backbones}-{train_cfg.lr_mp}"
     num_gpus = f"{get_world_size()}xGPU"
-    date = time.strftime("%m%d")
+    date = time.strftime("%m%d-%H%M%S")
     vit = f"{vlm_cfg.vit_model_type.split('/')[-1]}"
     mp = f"mp{vlm_cfg.mp_pixel_shuffle_factor}"
     llm = f"{vlm_cfg.lm_model_type.split('/')[-1]}"

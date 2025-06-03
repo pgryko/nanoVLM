@@ -52,7 +52,7 @@ class TrainConfig:
     batch_size: int = 32
     gradient_accumulation_steps: int = 4
     mmstar_batch_size: int = 32
-    max_grad_norm: float = None
+    max_grad_norm: float = 1.0
     eval_in_epochs: bool = True
     eval_interval: int = 250
     epochs: int = 5
