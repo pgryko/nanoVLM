@@ -33,7 +33,7 @@ class VLMConfig:
     lm_use_tokens: bool = False # Decide if the LM expects tokens or embeddings as input (if using as a backbone for the VLM, set to False)
     lm_tie_weights: bool = True # Decide if you want to tie the LM Head weight to the token embedding weights
     lm_model_type: str = 'HuggingFaceTB/SmolLM2-360M-Instruct'
-    lm_tokenizer: str = 'HuggingFaceTB/SmolLM2-360M-Instruct'
+    lm_tokenizer: str = 'HuggingFaceTB/HuggingFaceTB/cosmo2-tokenizer'
     lm_eos_token_id: int = 0
 
     mp_pixel_shuffle_factor: int = 2
