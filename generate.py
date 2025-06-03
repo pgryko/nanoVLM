@@ -18,7 +18,7 @@ def parse_args():
         help="Path to a local checkpoint (directory or safetensors/pth). If omitted, we pull from HF."
     )
     parser.add_argument(
-        "--hf_model", type=str, default="lusxvr/nanoVLM-222M",
+        "--hf_model", type=str, default="lusxvr/nanoVLM-450M",
         help="HuggingFace repo ID to download from incase --checkpoint isnt set."
     )
     parser.add_argument("--image", type=str, default="assets/image.png",
@@ -53,7 +53,7 @@ def main():
 
     image_segment_str = tokenizer.boi_token + tokenizer.image_token * model.cfg.IMAGE_TOKEN_LENGTH + tokenizer.eoi_token
 
-    template = f"{image_segment_str} Question: {args.prompt} Answer:"
+    template = f"{image_segment_str}Question: {args.prompt} Answer:"
     encoded = tokenizer.batch_encode_plus([template], return_tensors="pt")
     tokens = encoded["input_ids"].to(device)
 
