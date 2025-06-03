@@ -1,10 +1,10 @@
 import torch
 
 class VQACollator(object):  # Visual Question Answering Collator
-    def __init__(self, tokenizer, max_length, image_token_length):
+    def __init__(self, tokenizer, max_length, mp_image_token_length):
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.image_token_length = image_token_length
+        self.mp_image_token_length = mp_image_token_length
 
         self.boi_token_str = tokenizer.boi_token 
         self.eoi_token_str = tokenizer.eoi_token
@@ -22,13 +22,13 @@ class VQACollator(object):  # Visual Question Answering Collator
         input_sequences = []
         for i in range(len(texts)):
             # Construct the image token segment string
-            image_segment_str = self.image_token_str * self.image_token_length
+            image_segment_str = self.image_token_str * self.mp_image_token_length
             input_sequences.append(f"{self.boi_token_str}{image_segment_str}{self.eoi_token_str}{texts[i]}{answers[i]}")
 
         encoded_full_sequences = self.tokenizer.batch_encode_plus(
             input_sequences,
             padding="max_length",
-            padding_side="left", # Ensure padding is on the left
+            padding_side="left",
             return_tensors="pt",
             truncation=True,
             max_length=self.max_length,
@@ -46,7 +46,7 @@ class VQACollator(object):  # Visual Question Answering Collator
         
         # Calculate the number of tokens for the special image prefix (BOI, IMGs, EOI)
         # This encoding should not add other special tokens like BOS/EOS for length calculation.
-        special_image_prefix_str = f"{self.boi_token_str}{self.image_token_str * self.image_token_length}{self.eoi_token_str}"
+        special_image_prefix_str = f"{self.boi_token_str}{self.image_token_str * self.mp_image_token_length}{self.eoi_token_str}"
         num_special_prefix_tokens = len(self.tokenizer.encode(special_image_prefix_str, add_special_tokens=False))
 
         for i in range(len(batch)):
@@ -87,9 +87,9 @@ class VQACollator(object):  # Visual Question Answering Collator
         }
 
 class MMStarCollator(object):  # https://huggingface.co/datasets/Lin-Chen/MMStar
-    def __init__(self, tokenizer, image_token_length):
+    def __init__(self, tokenizer, mp_image_token_length):
         self.tokenizer = tokenizer
-        self.image_token_length = image_token_length
+        self.mp_image_token_length = mp_image_token_length
 
         self.boi_token_str = tokenizer.boi_token 
         self.eoi_token_str = tokenizer.eoi_token
@@ -105,7 +105,7 @@ class MMStarCollator(object):  # https://huggingface.co/datasets/Lin-Chen/MMStar
 
         # Create input sequences with image placeholders
         question_sequences = []
-        image_segment_str = self.image_token_str * self.image_token_length
+        image_segment_str = self.image_token_str * self.mp_image_token_length
         for question_text in questions:
             question_sequences.append(f"{self.boi_token_str}{image_segment_str}{self.eoi_token_str}{question_text}")
         

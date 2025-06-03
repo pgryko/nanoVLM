@@ -27,16 +27,15 @@ class VLMConfig:
     lm_dropout: float = 0.0
     lm_n_blocks: int = 30
     lm_attn_scaling: float = 1.0
-    IMAGE_TOKEN_LENGTH: int = 64
-    TOTAL_SEQUENCE_LENGTH: int = 512
-    lm_max_length: int = TOTAL_SEQUENCE_LENGTH # - IMAGE_TOKEN_LENGTH If using replacement image tokens, we don't need to substract them here anymore # Maximum length for the language model, derived from TOTAL_SEQUENCE_LENGTH and IMAGE_TOKEN_LENGTH
+    lm_max_length: int = 512
     lm_use_tokens: bool = False # Decide if the LM expects tokens or embeddings as input (if using as a backbone for the VLM, set to False)
     lm_tie_weights: bool = True # Decide if you want to tie the LM Head weight to the token embedding weights
     lm_model_type: str = 'HuggingFaceTB/SmolLM2-360M-Instruct'
-    lm_tokenizer: str = 'HuggingFaceTB/cosmo2-tokenizer'
+    lm_tokenizer: str = 'HuggingFaceTB/SmolLM2-360M-Instruct'
     lm_eos_token_id: int = 0
 
     mp_pixel_shuffle_factor: int = 2
+    mp_image_token_length: int = 64
 
     vlm_extra_tokens: dict[str, str] = field(default_factory=lambda: {"image_token": "<|image|>", "boi_token": "<|image_start|>", "eoi_token": "<|image_end|>"})
     vlm_load_backbone_weights: bool = True

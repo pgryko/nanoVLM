@@ -51,7 +51,7 @@ def main():
     tokenizer = get_tokenizer(model.cfg.lm_tokenizer, model.cfg.vlm_extra_tokens)
     image_processor = get_image_processor(model.cfg.vit_img_size)
 
-    image_segment_str = tokenizer.boi_token + tokenizer.image_token * model.cfg.IMAGE_TOKEN_LENGTH + tokenizer.eoi_token
+    image_segment_str = tokenizer.boi_token + tokenizer.image_token * model.cfg.mp_image_token_length + tokenizer.eoi_token
 
     template = f"{image_segment_str}Question: {args.prompt} Answer:"
     encoded = tokenizer.batch_encode_plus([template], return_tensors="pt")

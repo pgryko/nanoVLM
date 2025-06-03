@@ -35,28 +35,28 @@ class VisionLanguageModel(nn.Module):
 
     def forward(self, input_ids, image, attention_mask=None, targets=None):
         image_embd = self.vision_encoder(image)
-        image_embd = self.MP(image_embd) # [B, IMAGE_TOKEN_LENGTH, D_lm]
+        image_embd = self.MP(image_embd) # [B, mp_image_token_length, D_lm]
 
         token_embd = self.decoder.token_embedding(input_ids) # [B, T_sequence, D_lm]
 
         # Identify image token placeholder positions and replace their embeddings
-        # and cfg.IMAGE_TOKEN_LENGTH is the number of image tokens to replace.
+        # and cfg.mp_image_token_length is the number of image tokens to replace.
         image_token_id = self.tokenizer.image_token_id 
         
         # For each item in the batch, find the start of the image token sequence
-        # We expect cfg.IMAGE_TOKEN_LENGTH consecutive image_token_id
+        # We expect cfg.mp_image_token_length consecutive image_token_id
         # We also expect a BOI and EOI token, but we only replace the image_token_id ones.
-        # The collator should ensure input_ids has self.cfg.IMAGE_TOKEN_LENGTH placeholders
+        # The collator should ensure input_ids has self.cfg.mp_image_token_length placeholders
         
         updated_token_embd = token_embd.clone()
 
         # Vectorized replacement of image token placeholders.
-        # This assumes that `input_ids` contains `self.cfg.IMAGE_TOKEN_LENGTH` placeholders
+        # This assumes that `input_ids` contains `self.cfg.mp_image_token_length` placeholders
         # for image tokens, and `image_embd` has the corresponding features.
         # The fallback logic for mismatched token counts is omitted as per request.
         
         batch_size = input_ids.size(0)
-        image_token_len = self.cfg.IMAGE_TOKEN_LENGTH # Renamed L to image_token_len for clarity
+        image_token_len = self.cfg.mp_image_token_length # Renamed L to image_token_len for clarity
 
         # Find the start index of image tokens for each item in the batch.
         # `torch.argmax` on the boolean mask (cast to int) returns the first index of `True` (value 1).
@@ -78,7 +78,7 @@ class VisionLanguageModel(nn.Module):
         
         # Perform the replacement using advanced indexing.
         # `updated_token_embd[batch_idx_fill, sequence_idx_fill]` selects slices of shape [batch_size, image_token_len, D_lm]
-        # `image_embd` also has shape [batch_size, image_token_len, D_lm] (or [B, IMAGE_TOKEN_LENGTH, D_lm])
+        # `image_embd` also has shape [batch_size, image_token_len, D_lm] (or [B, mp_image_token_length, D_lm])
         updated_token_embd[batch_idx_fill, sequence_idx_fill] = image_embd.to(updated_token_embd.dtype)
 
         # The combined_embd is now the token_embd with image parts replaced.
@@ -99,7 +99,7 @@ class VisionLanguageModel(nn.Module):
 
         # 1. Process image
         image_embd = self.vision_encoder(image) # [B, T_img_feat, D_model]
-        image_embd = self.MP(image_embd)      # [B, IMAGE_TOKEN_LENGTH, D_lm]
+        image_embd = self.MP(image_embd)      # [B, mp_image_token_length, D_lm]
 
         # 2. Embed initial text prompt tokens
         prompt_token_embeds = self.decoder.token_embedding(input_ids) # [B, T_prompt_text, D_lm]
@@ -111,7 +111,7 @@ class VisionLanguageModel(nn.Module):
 
         # Vectorized replacement of image token placeholders.
         batch_size = input_ids.size(0)
-        image_token_len = self.cfg.IMAGE_TOKEN_LENGTH
+        image_token_len = self.cfg.mp_image_token_length
 
         # Find the start index of image tokens for each item in the batch.
         start_indices = torch.argmax((input_ids == image_token_id).int(), dim=1)
