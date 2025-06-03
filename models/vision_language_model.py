@@ -161,7 +161,34 @@ class VisionLanguageModel(nn.Module):
         if not newly_generated_ids_list: # Handle case where max_new_tokens might be 0
             return torch.empty((batch_size,0), dtype=torch.long, device=input_ids.device)
 
-        return torch.cat(newly_generated_ids_list, dim=1)
+        generated_ids = torch.cat(newly_generated_ids_list, dim=1)
+
+        # Post-process to handle EOS token.
+        if self.tokenizer.eos_token_id is not None and generated_ids.numel() > 0: # Ensure generated_ids is not empty
+            seq_len = generated_ids.size(1)
+            device = generated_ids.device
+
+            eos_mask = (generated_ids == self.tokenizer.eos_token_id) # Create a boolean mask for EOS tokens
+
+            col_indices_for_min = torch.arange(seq_len, device=device) # Create column indices [0, 1, ..., seq_len-1]
+            
+            # In eos_mask, mark positions with actual col_idx, others with a large number
+            masked_col_indices = torch.where(eos_mask, col_indices_for_min.unsqueeze(0).expand_as(generated_ids), seq_len + 1) 
+
+            first_eos_indices_values = torch.min(masked_col_indices, dim=1).values
+            
+            # Clamp values to seq_len (if no EOS found, min will be seq_len + 1, clamp brings it to seq_len0. This means if no EOS, or EOS is the last token, no replacement will happen for that sample.
+            actual_first_eos_indices = torch.clamp(first_eos_indices_values, max=seq_len)
+
+            # Create column indices for comparison, shape [batch_size, seq_len]
+            col_indices_for_comparison = torch.arange(seq_len, device=device).unsqueeze(0).expand_as(generated_ids)
+            
+            # Tokens are replaced if their column index is greater than the index of the first EOS token
+            replace_mask = col_indices_for_comparison > actual_first_eos_indices.unsqueeze(1)
+            
+            generated_ids[replace_mask] = self.tokenizer.eos_token_id
+        
+        return generated_ids
 
     @classmethod
     def from_pretrained(
