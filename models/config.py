@@ -20,7 +20,7 @@ class VLMConfig:
     lm_re_base: int = 100000
     lm_max_position_embeddings: int = 8192
     lm_base_vocab_size: int = 49152
-    extra_token_amount: int = 3  # Number of extra tokens for the VLM (image start, image end, image token)
+    extra_token_amount: int = 1  # Number of extra tokens for the VLM (image start, image end, image token)
     lm_vocab_size: int = lm_base_vocab_size + extra_token_amount # Not a great way to do this, but it works for now (vlm_extra_tokens cannot be a dict, since this is mutable, and a Field has no len() function)
     lm_n_heads: int = 9
     lm_n_kv_heads: int = 3
@@ -37,7 +37,7 @@ class VLMConfig:
     mp_pixel_shuffle_factor: int = 2
     mp_image_token_length: int = 64
 
-    vlm_extra_tokens: dict[str, str] = field(default_factory=lambda: {"image_token": "<|image|>", "boi_token": "<|image_start|>", "eoi_token": "<|image_end|>"})
+    vlm_extra_tokens: dict[str, str] = field(default_factory=lambda: {"image_token": "<|image|>"})#, "boi_token": "<|image_start|>", "eoi_token": "<|image_end|>"})
     vlm_load_backbone_weights: bool = True
     vlm_checkpoint_path: str = 'checkpoints'
     hf_repo_name: str = None #'nanoVLM'

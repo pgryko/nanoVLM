@@ -6,8 +6,6 @@ class VQACollator(object):  # Visual Question Answering Collator
         self.max_length = max_length
         self.mp_image_token_length = mp_image_token_length
 
-        self.boi_token_str = tokenizer.boi_token 
-        self.eoi_token_str = tokenizer.eoi_token
         self.image_token_str = tokenizer.image_token
     
     def __call__(self, batch):
@@ -22,8 +20,7 @@ class VQACollator(object):  # Visual Question Answering Collator
         input_sequences = []
         for i in range(len(texts)):
             # Construct the image token segment string
-            image_segment_str = self.image_token_str * self.mp_image_token_length
-            input_sequences.append(f"{self.boi_token_str}{image_segment_str}{self.eoi_token_str}{texts[i]}{answers[i]}")
+            input_sequences.append(f"{self.image_token_str * self.mp_image_token_length}{texts[i]}{answers[i]}")
 
         encoded_full_sequences = self.tokenizer.batch_encode_plus(
             input_sequences,
@@ -43,11 +40,6 @@ class VQACollator(object):  # Visual Question Answering Collator
 
         # Determine original lengths before padding/truncation to handle truncation cases
         original_lengths = [len(self.tokenizer.encode(seq)) for seq in input_sequences]
-        
-        # Calculate the number of tokens for the special image prefix (BOI, IMGs, EOI)
-        # This encoding should not add other special tokens like BOS/EOS for length calculation.
-        special_image_prefix_str = f"{self.boi_token_str}{self.image_token_str * self.mp_image_token_length}{self.eoi_token_str}"
-        num_special_prefix_tokens = len(self.tokenizer.encode(special_image_prefix_str, add_special_tokens=False))
 
         for i in range(len(batch)):
             # Case 1: If sequence was truncated (original is longer than max_length)
@@ -70,7 +62,7 @@ class VQACollator(object):  # Visual Question Answering Collator
             first_token_pos = attention_mask[i].nonzero(as_tuple=True)[0][0].item()
             
             # The total length of the "prompt" part (special image tokens + question)
-            total_prompt_length = num_special_prefix_tokens + question_part_length
+            total_prompt_length = self.mp_image_token_length + question_part_length
             
             # Mask labels for padding tokens (before first_token_pos) and the entire prompt part.
             # The prompt part starts at first_token_pos and has length total_prompt_length.
@@ -91,8 +83,6 @@ class MMStarCollator(object):  # https://huggingface.co/datasets/Lin-Chen/MMStar
         self.tokenizer = tokenizer
         self.mp_image_token_length = mp_image_token_length
 
-        self.boi_token_str = tokenizer.boi_token 
-        self.eoi_token_str = tokenizer.eoi_token
         self.image_token_str = tokenizer.image_token
     
     def __call__(self, batch):
@@ -105,9 +95,8 @@ class MMStarCollator(object):  # https://huggingface.co/datasets/Lin-Chen/MMStar
 
         # Create input sequences with image placeholders
         question_sequences = []
-        image_segment_str = self.image_token_str * self.mp_image_token_length
         for question_text in questions:
-            question_sequences.append(f"{self.boi_token_str}{image_segment_str}{self.eoi_token_str}{question_text}")
+            question_sequences.append(f"{self.image_token_str * self.mp_image_token_length}{question_text}")
         
         
         encoded_question_sequences = self.tokenizer.batch_encode_plus(
