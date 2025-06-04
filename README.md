@@ -121,7 +121,7 @@ export HF_HOME="<Path to HF cache>"
 huggingface-cli login
 
 # Evaluate a trained model on multiple benchmarks
-python evaluate_with_lmms.py --model_path lusxvr/nanoVLM-222M --tasks mmstar,mme
+python evaluation.py --model_path lusxvr/nanoVLM-222M --tasks mmstar,mme
 
 # Enable lmms-eval during training for intermediate evaluation
 python train.py  # with use_lmms_eval=True in TrainConfig

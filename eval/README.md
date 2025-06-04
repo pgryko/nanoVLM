@@ -7,7 +7,7 @@ This PR integrates [lmms-eval](https://github.com/EvolvingLMMs-Lab/lmms-eval) in
 ## Key Features
 
 ### 🎯 Standalone Evaluation Script
-- New `evaluate_with_lmms.py` script for evaluating trained models
+- New `evaluation.py` script for evaluating trained models
 - Support for multiple benchmarks in a single run
 - Configurable batch size and example limits
 - Built-in task discovery with `--list_tasks`
@@ -35,13 +35,13 @@ This PR integrates [lmms-eval](https://github.com/EvolvingLMMs-Lab/lmms-eval) in
 pip install lmms-eval
 
 # Evaluate a trained model on multiple benchmarks
-python evaluate_with_lmms.py --model_path lusxvr/nanoVLM-222M --tasks mmstar,mme,gqa
+python evaluation.py --model_path lusxvr/nanoVLM-222M --tasks mmstar,mme,gqa
 
 # List all available evaluation tasks
-python evaluate_with_lmms.py --list_tasks
+python evaluation.py --list_tasks
 
 # Evaluate with custom settings
-python evaluate_with_lmms.py \
+python evaluation.py \
     --model_path ./checkpoints/my_model \
     --tasks mme,vqav2 \
     --batch_size 16 \
@@ -103,7 +103,7 @@ results = run_lmms_evaluation(
 ## Implementation Details
 
 ### New Files
-- `evaluate_with_lmms.py` - Standalone evaluation script
+- `evaluation.py` - Standalone evaluation script
 - `evaluation.py` - Core evaluation functions
 - `models/lmms_eval_wrapper.py` - Model wrapper for lmms-eval compatibility
 - `tests/test_lmms_eval_integration.py` - Unit tests

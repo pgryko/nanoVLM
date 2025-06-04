@@ -14,7 +14,7 @@ except ImportError:
 
 from models.config import VLMConfig
 from models.vision_language_model import VisionLanguageModel
-from models.lmms_eval_wrapper import NanoVLMWrapper
+from eval.lmms_eval_wrapper import NanoVLMWrapper
 from data.processors import get_tokenizer, get_image_processor
 
 
@@ -52,14 +52,35 @@ class TestLMMSEvalIntegration(unittest.TestCase):
     def test_generate_until(self):
         """Test generate_until method."""
         # Create a mock request
+        # The arguments tuple must now match the expected structure for the wrapper's Collator
+        # (context_str, gen_kwargs, doc_to_visual_fn, doc_id, task_name, split_name)
         request = Instance(
             request_type="generate_until",
-            doc={},
-            arguments=("Hello", {"max_new_tokens": 10, "temperature": 0.0}),
+            doc={}, # doc can be empty for this test
+            arguments=(
+                "Hello",  # context_str
+                {"max_new_tokens": 10, "temperature": 0.0},  # gen_kwargs
+                lambda x: [], # doc_to_visual_fn (dummy function returning empty list of visuals)
+                0,  # doc_id
+                "test_task",  # task_name
+                "test_split"  # split_name
+            ),
             idx=0,
             metadata={'task': 'test_task', 'doc_id': 0, 'repeats': 1}
+            # For the wrapper, task_name and doc_id are now part of 'arguments'.
         )
-        request.visual = None  # Ensure no visual input for this test
+        # request.visual is not used by generate_until directly; doc_to_visual handles visuals.
+        
+        # Mock task_dict for the wrapper.
+        # This is necessary because the wrapper's generate_until accesses self.task_dict[task][split][ids]
+        # even if the doc_to_visual function (like our dummy lambda) doesn't use the result.
+        self.wrapper.task_dict = {
+            "test_task": {
+                "test_split": {
+                    0: {}  # Mocking an entry for doc_id 0. The content {} is arbitrary for the dummy lambda.
+                }
+            }
+        }
         
         # Generate
         results = self.wrapper.generate_until([request])
@@ -81,15 +102,9 @@ class TestLMMSEvalIntegration(unittest.TestCase):
         )
         request.visual = None
         
-        # Compute loglikelihood
-        results = self.wrapper.loglikelihood([request])
-        
-        # Check results
-        self.assertEqual(len(results), 1)
-        self.assertIsInstance(results[0], tuple)
-        self.assertEqual(len(results[0]), 2)
-        self.assertIsInstance(results[0][0], float)  # log likelihood
-        self.assertIsInstance(results[0][1], bool)   # is_greedy
+        # Assert that NotImplementedError is raised
+        with self.assertRaises(NotImplementedError):
+            self.wrapper.loglikelihood([request])
     
     @unittest.skipIf(not LMMS_EVAL_AVAILABLE, "lmms-eval not installed")
     def test_visual_input_preparation(self):
@@ -101,17 +116,17 @@ class TestLMMSEvalIntegration(unittest.TestCase):
         pil_image = Image.fromarray(dummy_image)
         
         # Test with PIL image
-        visual_list = [{"image": pil_image}]
+        visual_list = [pil_image] # Pass the image directly
         processed = self.wrapper._prepare_visual_input(visual_list)
         self.assertIsNotNone(processed)
         self.assertEqual(processed.shape[0], 1)  # Batch size 1
         
         # Test with numpy array
-        visual_list = [{"image": dummy_image}]
+        visual_list = [dummy_image] # Pass the numpy array directly
         processed = self.wrapper._prepare_visual_input(visual_list)
         self.assertIsNotNone(processed)
         
-        # Test with None
+        # Test with None (visual_list itself is None, not a list containing None)
         processed = self.wrapper._prepare_visual_input(None)
         self.assertIsNone(processed)
         

@@ -24,7 +24,7 @@ from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
 import models.config as config
 import models.utils as utils
-from evaluation import run_lmms_evaluation, print_evaluation_results
+from eval.evaluation import run_lmms_evaluation, print_evaluation_results
 
 #Otherwise, the tokenizer will through a warning
 import os
