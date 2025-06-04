@@ -24,5 +24,3 @@ uv.lock
 checkpoints/
 notebooks/
 *.slurm
-
-benchmark_results.json
