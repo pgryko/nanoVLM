@@ -45,7 +45,7 @@ class VLMConfig:
 
 @dataclass
 class TrainConfig:
-    lr_mp: float = 0.00512
+    lr_mp: float = 0.003
     lr_backbones: float = 5e-5
     data_cutoff_idx: int = None
     val_ratio: float = 0.025
