@@ -86,7 +86,7 @@ which will use the default `models/config.py`.
 
 ## Generate
 
-To try a [trained model](https://huggingface.co/lusxvr/nanoVLM-222M), you can simply use the provided generate script
+To try a [trained model](https://huggingface.co/lusxvr/nanoVLM-450M), you can simply use the provided generate script
 ```bash
 python generate.py
 ```
@@ -121,7 +121,7 @@ export HF_HOME="<Path to HF cache>"
 huggingface-cli login
 
 # Evaluate a trained model on multiple benchmarks
-python evaluation.py --model_path lusxvr/nanoVLM-222M --tasks mmstar,mme
+python evaluation.py --model_path lusxvr/nanoVLM-450M --tasks mmstar,mme
 
 # Enable lmms-eval during training for intermediate evaluation
 python train.py  # with use_lmms_eval=True in TrainConfig
@@ -139,7 +139,7 @@ Here is how to load from a repo on the Hugging Face Hub. This is the recommended
 # Load pretrained weights from Hub
 from models.vision_language_model import VisionLanguageModel
 
-model = VisionLanguageModel.from_pretrained("lusxvr/nanoVLM-222M")
+model = VisionLanguageModel.from_pretrained("lusxvr/nanoVLM-450M")
 ```
 
 ### Push to hub
