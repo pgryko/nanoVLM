@@ -11,6 +11,8 @@ from models.language_model import LanguageModel
 from models.modality_projector import ModalityProjector
 from models.config import VLMConfig
 
+from data.processors import get_tokenizer
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -29,32 +31,57 @@ class VisionLanguageModel(nn.Module):
             self.decoder = LanguageModel(cfg)
         self.MP = ModalityProjector(cfg)
         self.load_backbone = load_backbone
+        self.tokenizer = get_tokenizer(cfg.lm_tokenizer, cfg.vlm_extra_tokens)
+
+    def _replace_img_tokens_with_embd(self, input_ids, token_embd, image_embd):
+        # Vectorized replacement of image token placeholders.
+        # This assumes that `input_ids` contains `self.cfg.mp_image_token_length` placeholders
+        # for image tokens, and `image_embd` has the corresponding features.
+        updated_token_embd = token_embd.clone()
+
+        # Find the start index of image tokens for each item in the batch.
+        # `torch.argmax` on the boolean mask (cast to int) returns the first index of `True` (value 1).
+        # This relies on image_token_id being present and marking the start of the block.
+        start_indices = torch.argmax((input_ids == self.tokenizer.image_token_id).int(), dim=1) # Shape: [batch_size]
+
+        # Create batch indices for advanced indexing.
+        # This tensor will be like [[0,0,..0], [1,1,..1], ..., [B-1,B-1,..B-1]]
+        # where each inner list has length `image_token_len`.
+        batch_idx_fill = torch.arange(input_ids.size(0), device=input_ids.device).unsqueeze(1).expand(-1, self.cfg.mp_image_token_length) # Shape: [batch_size, image_token_len]
+
+        # Create sequence indices for replacement.
+        # `seq_offsets` will be [0, 1, ..., image_token_len-1]
+        seq_offsets = torch.arange(self.cfg.mp_image_token_length, device=input_ids.device).unsqueeze(0) # Shape: [1, image_token_len]
+
+        # `start_indices.unsqueeze(1)` results in shape [batch_size, 1].
+        # Broadcasting with `seq_offsets` gives, for each batch item `b`:
+        # [start_indices[b], start_indices[b]+1, ..., start_indices[b]+image_token_len-1]
+        sequence_idx_fill = start_indices.unsqueeze(1) + seq_offsets # Shape: [batch_size, image_token_len]
+
+        # Perform the replacement using advanced indexing.
+        # `updated_token_embd[batch_idx_fill, sequence_idx_fill]` selects slices of shape [batch_size, image_token_len, D_lm]
+        # `image_embd` also has shape [batch_size, image_token_len, D_lm] (or [B, mp_image_token_length, D_lm])
+        updated_token_embd[batch_idx_fill, sequence_idx_fill] = image_embd.to(updated_token_embd.dtype)
+        
+        return updated_token_embd
 
     def forward(self, input_ids, image, attention_mask=None, targets=None):
         image_embd = self.vision_encoder(image)
-        image_embd = self.MP(image_embd)
+        image_embd = self.MP(image_embd) # [B, mp_image_token_length, D_lm]
 
-        token_embd = self.decoder.token_embedding(input_ids)
-
-        combined_embd = torch.cat((image_embd, token_embd), dim=1) # Concatenate image embeddings to token embeddings
+        token_embd = self.decoder.token_embedding(input_ids) # [B, T_sequence, D_lm]
         
-        # Adjust attention mask to account for image tokens
-        if attention_mask is not None:
-            # Create mask of 1s for image tokens (all image tokens should be attended to)
-            batch_size = image_embd.size(0)
-            img_seq_len = image_embd.size(1)
-            image_attention_mask = torch.ones((batch_size, img_seq_len), device=attention_mask.device, dtype=attention_mask.dtype)
-            
-            # Combine image and token attention masks
-            attention_mask = torch.cat((image_attention_mask, attention_mask), dim=1)
+        updated_token_embd = self._replace_img_tokens_with_embd(input_ids, token_embd, image_embd)
 
-        logits, _ = self.decoder(combined_embd, attention_mask=attention_mask) # Not logits yet, but easier to return like this
+        # The updated_token_embd is now the token_embd with image parts replaced.
+        # The attention_mask comes from the collator and should already cover the full sequence.
+        logits, _ = self.decoder(updated_token_embd, attention_mask=attention_mask)
 
         loss = None
         if targets is not None:
-            # Only use the token part of the logits for loss computation
-            logits = self.decoder.head(logits)
-            logits = logits[:, image_embd.size(1):, :]
+            logits = self.decoder.head(logits) # Apply LM head
+            # Loss is calculated over all tokens, but `targets` (labels) will have -100 for non-answer tokens.
+            # No need to slice logits based on image embedding size here, as the target mask handles it.
             loss = F.cross_entropy(logits.reshape(-1, logits.size(-1)), targets.reshape(-1), ignore_index=-100)
 
         return logits, loss
@@ -63,29 +90,22 @@ class VisionLanguageModel(nn.Module):
     def generate(self, input_ids, image, attention_mask=None, max_new_tokens=5, top_k=50, top_p=0.9, temperature=0.5, greedy=False):
 
         # 1. Process image
-        image_embd = self.vision_encoder(image) # [B, T_img, D_model]
-        image_embd = self.MP(image_embd)      # [B, T_img, D_lm]
+        image_embd = self.vision_encoder(image) # [B, T_img_feat, D_model]
+        image_embd = self.MP(image_embd)      # [B, mp_image_token_length, D_lm]
 
         # 2. Embed initial text prompt tokens
         prompt_token_embeds = self.decoder.token_embedding(input_ids) # [B, T_prompt_text, D_lm]
 
-        # 3. Combine image and text prompt embeddings for prefill
-        initial_combined_embeds = torch.cat((image_embd, prompt_token_embeds), dim=1) # [B, T_img + T_prompt_text, D_lm]
-        current_total_seq_len = initial_combined_embeds.size(1)
+        # 3. Combine image and text embeddings
+        initial_combined_embeds = self._replace_img_tokens_with_embd(input_ids, prompt_token_embeds, image_embd)
 
-        batch_size = image_embd.size(0)
-        if attention_mask is not None:
-            # Create mask of 1s for image tokens (all image tokens should be attended to)
-            img_seq_len = image_embd.size(1)
-            image_attention_mask = torch.ones((batch_size, img_seq_len), device=attention_mask.device, dtype=attention_mask.dtype)
-            
-            # Combine image and token attention masks
-            attention_mask = torch.cat((image_attention_mask, attention_mask), dim=1)
+        current_total_seq_len = initial_combined_embeds.size(1)
+        batch_size = input_ids.size(0) # Or initial_combined_embeds.size(0)
         
         # --- Multimodal Prefill Phase ---
         prefill_output, kv_cache_list = self.decoder(
             initial_combined_embeds,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask, # Use the provided attention mask
             kv_cache=None,
             start_pos=0
         )
@@ -141,7 +161,34 @@ class VisionLanguageModel(nn.Module):
         if not newly_generated_ids_list: # Handle case where max_new_tokens might be 0
             return torch.empty((batch_size,0), dtype=torch.long, device=input_ids.device)
 
-        return torch.cat(newly_generated_ids_list, dim=1)
+        generated_ids = torch.cat(newly_generated_ids_list, dim=1)
+
+        # Post-process to handle EOS token.
+        if self.tokenizer.eos_token_id is not None and generated_ids.numel() > 0: # Ensure generated_ids is not empty
+            seq_len = generated_ids.size(1)
+            device = generated_ids.device
+
+            eos_mask = (generated_ids == self.tokenizer.eos_token_id) # Create a boolean mask for EOS tokens
+
+            col_indices_for_min = torch.arange(seq_len, device=device) # Create column indices [0, 1, ..., seq_len-1]
+            
+            # In eos_mask, mark positions with actual col_idx, others with a large number
+            masked_col_indices = torch.where(eos_mask, col_indices_for_min.unsqueeze(0).expand_as(generated_ids), seq_len + 1) 
+
+            first_eos_indices_values = torch.min(masked_col_indices, dim=1).values
+            
+            # Clamp values to seq_len (if no EOS found, min will be seq_len + 1, clamp brings it to seq_len0. This means if no EOS, or EOS is the last token, no replacement will happen for that sample.
+            actual_first_eos_indices = torch.clamp(first_eos_indices_values, max=seq_len)
+
+            # Create column indices for comparison, shape [batch_size, seq_len]
+            col_indices_for_comparison = torch.arange(seq_len, device=device).unsqueeze(0).expand_as(generated_ids)
+            
+            # Tokens are replaced if their column index is greater than the index of the first EOS token
+            replace_mask = col_indices_for_comparison > actual_first_eos_indices.unsqueeze(1)
+            
+            generated_ids[replace_mask] = self.tokenizer.eos_token_id
+        
+        return generated_ids
 
     @classmethod
     def from_pretrained(

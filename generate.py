@@ -18,7 +18,7 @@ def parse_args():
         help="Path to a local checkpoint (directory or safetensors/pth). If omitted, we pull from HF."
     )
     parser.add_argument(
-        "--hf_model", type=str, default="lusxvr/nanoVLM-222M",
+        "--hf_model", type=str, default="lusxvr/nanoVLM-450M",
         help="HuggingFace repo ID to download from incase --checkpoint isnt set."
     )
     parser.add_argument("--image", type=str, default="assets/image.png",
@@ -48,10 +48,10 @@ def main():
     model = VisionLanguageModel.from_pretrained(source).to(device)
     model.eval()
 
-    tokenizer = get_tokenizer(model.cfg.lm_tokenizer)
+    tokenizer = get_tokenizer(model.cfg.lm_tokenizer, model.cfg.vlm_extra_tokens)
     image_processor = get_image_processor(model.cfg.vit_img_size)
 
-    template = f"Question: {args.prompt} Answer:"
+    template = f"{tokenizer.image_token * model.cfg.mp_image_token_length}Question: {args.prompt} Answer:"
     encoded = tokenizer.batch_encode_plus([template], return_tensors="pt")
     tokens = encoded["input_ids"].to(device)
 
