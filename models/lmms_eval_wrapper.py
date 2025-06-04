@@ -46,7 +46,7 @@ class NanoVLMWrapper(lmms):
         
         # Get tokenizer and image processor from model config if not provided
         if tokenizer is None:
-            self.tokenizer = get_tokenizer(model.cfg.lm_tokenizer)
+            self.tokenizer = get_tokenizer(model.cfg.lm_tokenizer, model.cfg.vlm_extra_tokens)
         else:
             self.tokenizer = tokenizer
             
@@ -89,34 +89,50 @@ class NanoVLMWrapper(lmms):
                 context, continuation = request.args
                 visual_list = request.visual if hasattr(request, 'visual') else None
                 
-                # Prepare inputs
-                full_text = context + continuation
-                inputs = self.tokenizer(full_text, return_tensors="pt")
+                images_tensor = self._prepare_visual_input(visual_list)
+
+                current_context_str_for_tokenizer = ""
+                if images_tensor is not None:
+                    # Prepend image tokens string placeholder
+                    current_context_str_for_tokenizer += self.tokenizer.image_token * self.model.cfg.mp_image_token_length
+                
+                current_context_str_for_tokenizer += context # Append the textual context
+                
+                full_text_str_for_tokenizer = current_context_str_for_tokenizer + continuation
+
+                # Tokenize the full text
+                inputs = self.tokenizer(
+                    full_text_str_for_tokenizer,
+                    return_tensors="pt",
+                    padding="longest", # Appropriate for single instance processing
+                    truncation=True,
+                    max_length=self.max_length
+                )
                 input_ids = inputs["input_ids"].to(self.device)
                 attention_mask = inputs["attention_mask"].to(self.device)
-                
-                # Get context token length to know where continuation starts
-                context_inputs = self.tokenizer(context, return_tensors="pt")
+
+                # Tokenize the context part (image_placeholders + text_context) to get its length
+                context_inputs = self.tokenizer(current_context_str_for_tokenizer, return_tensors="pt") # Uses default add_special_tokens
                 context_length = context_inputs["input_ids"].shape[1]
                 
-                # Prepare visual input
-                images = self._prepare_visual_input(visual_list)
-                
-                # If no images, create a dummy image tensor
-                if images is None:
-                    dummy_image = torch.zeros(
-                        (1, 3, self.model.cfg.vit_img_size, self.model.cfg.vit_img_size),
-                        device=self.device
-                    )
-                    images = dummy_image
+                # Prepare image tensor for the model
+                images_for_model: Optional[torch.Tensor]
+                if images_tensor is not None:
+                    images_for_model = images_tensor.to(self.device)
+                    if images_for_model.shape[0] != input_ids.shape[0]: # Ensure batch size consistency
+                        images_for_model = images_for_model.expand(input_ids.shape[0], -1, -1, -1)
+                else:
+                    # If no images, pass None to the model
+                    images_for_model = None
                 
                 # Forward pass
                 outputs, _ = self.model(
                     input_ids,
-                    images,
+                    images_for_model,
                     attention_mask=attention_mask,
                     targets=None  # No targets for loglikelihood computation
                 )
+                outputs = self.model.decoder.head(outputs) # Since no targets are provided, we need to apply the head to get the logits
                 
                 # Calculate log probabilities
                 logits = outputs[:, :-1]  # Shift for next token prediction
@@ -150,13 +166,35 @@ class NanoVLMWrapper(lmms):
                 gen_kwargs = request.args[1] if len(request.args) > 1 else {}
                 visual_list = request.visual if hasattr(request, 'visual') else None
 
+                images_tensor = self._prepare_visual_input(visual_list)
+
+                current_prompt_str_for_tokenizer = ""
+                if images_tensor is not None:
+                    # Prepend image tokens string placeholder
+                    current_prompt_str_for_tokenizer += self.tokenizer.image_token * self.model.cfg.mp_image_token_length
+                
+                current_prompt_str_for_tokenizer += context # Append the textual context
+
                 # Prepare inputs
-                inputs = self.tokenizer(context, return_tensors="pt")
+                inputs = self.tokenizer(
+                    current_prompt_str_for_tokenizer,
+                    return_tensors="pt",
+                    padding="longest", # Appropriate for single instance processing
+                    truncation=True,
+                    max_length=self.max_length - gen_kwargs.get("max_new_tokens", 50) # Ensure prompt itself fits
+                )
                 input_ids = inputs["input_ids"].to(self.device)
                 attention_mask = inputs["attention_mask"].to(self.device)
                 
-                # Prepare visual input
-                images = self._prepare_visual_input(visual_list)
+                # Prepare image tensor for the model
+                images_for_model: Optional[torch.Tensor]
+                if images_tensor is not None:
+                    images_for_model = images_tensor.to(self.device)
+                    if images_for_model.shape[0] != input_ids.shape[0]: # Ensure batch size consistency
+                        images_for_model = images_for_model.expand(input_ids.shape[0], -1, -1, -1)
+                else:
+                    # If no images, pass None to the model
+                    images_for_model = None
                 
                 # Extract generation parameters
                 max_new_tokens = gen_kwargs.get("max_new_tokens", 50)
@@ -165,18 +203,9 @@ class NanoVLMWrapper(lmms):
                 greedy = temperature == 0.0
 
                 # Generate
-                if images is None:
-                    # If no images, create a dummy image tensor
-                    # This is a workaround for models that always expect image input
-                    dummy_image = torch.zeros(
-                        (1, 3, self.model.cfg.vit_img_size, self.model.cfg.vit_img_size),
-                        device=self.device
-                    )
-                    images = dummy_image
-                
                 generated_ids = self.model.generate(
                     input_ids,
-                    images,
+                    images_for_model,
                     attention_mask,
                     max_new_tokens=max_new_tokens,
                     greedy=greedy,

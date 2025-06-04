@@ -2,7 +2,7 @@
 
 import unittest
 import torch
-from types import SimpleNamespace
+import numpy as np
 
 try:
     from lmms_eval.api.model import lmms
@@ -12,6 +12,7 @@ except ImportError:
     LMMS_EVAL_AVAILABLE = False
     print("lmms-eval not installed. Skipping integration tests.")
 
+from models.config import VLMConfig
 from models.vision_language_model import VisionLanguageModel
 from models.lmms_eval_wrapper import NanoVLMWrapper
 from data.processors import get_tokenizer, get_image_processor
@@ -22,46 +23,11 @@ class TestLMMSEvalIntegration(unittest.TestCase):
     @unittest.skipIf(not LMMS_EVAL_AVAILABLE, "lmms-eval not installed")
     def setUp(self):
         """Set up a minimal model for testing."""
-        # Minimal config for testing
-        self.cfg = SimpleNamespace(
-            # Vision config
-            vit_hidden_dim=64,
-            vit_inter_dim=128,
-            vit_patch_size=16,
-            vit_img_size=224,
-            vit_n_heads=4,
-            vit_dropout=0.0,
-            vit_n_blocks=2,
-            vit_ln_eps=1e-6,
-            vit_cls_flag=False,
-            vit_model_type='test',
-            # Language config
-            lm_hidden_dim=64,
-            lm_inter_dim=128,
-            lm_rms_eps=1e-5,
-            lm_re_base=10000.0,
-            lm_max_position_embeddings=512,
-            lm_vocab_size=100,
-            lm_n_heads=4,
-            lm_n_kv_heads=2,
-            lm_dropout=0.0,
-            lm_n_blocks=2,
-            lm_attn_scaling=1.0,
-            lm_use_tokens=False,
-            lm_tie_weights=True,
-            lm_tokenizer='HuggingFaceTB/cosmo2-tokenizer',
-            lm_eos_token_id=0,
-            # Modality projection
-            mp_pixel_shuffle_factor=2,
-            # Other
-            IMAGE_TOKEN_LENGTH=49,
-            TOTAL_SEQUENCE_LENGTH=128,
-            lm_max_length=79,
-            vlm_load_backbone_weights=False,
-        )
+        # Minimal config for testing using VLMConfig
+        self.cfg = VLMConfig()
         
         # Create model without loading pretrained weights
-        self.model = VisionLanguageModel(self.cfg, load_backbone=False)
+        self.model = VisionLanguageModel(self.cfg)
         self.model.eval()
         
         # Get tokenizer and image processor
@@ -91,8 +57,9 @@ class TestLMMSEvalIntegration(unittest.TestCase):
             doc={},
             arguments=("Hello", {"max_new_tokens": 10, "temperature": 0.0}),
             idx=0,
+            metadata={'task': 'test_task', 'doc_id': 0, 'repeats': 1}
         )
-        request.visual = None  # No visual input for this test
+        request.visual = None  # Ensure no visual input for this test
         
         # Generate
         results = self.wrapper.generate_until([request])
@@ -110,6 +77,7 @@ class TestLMMSEvalIntegration(unittest.TestCase):
             doc={},
             arguments=("The cat is", " sitting"),
             idx=0,
+            metadata={'task': 'test_task', 'doc_id': 0, 'repeats': 1}
         )
         request.visual = None
         
@@ -126,7 +94,6 @@ class TestLMMSEvalIntegration(unittest.TestCase):
     @unittest.skipIf(not LMMS_EVAL_AVAILABLE, "lmms-eval not installed")
     def test_visual_input_preparation(self):
         """Test visual input preparation."""
-        import numpy as np
         from PIL import Image
         
         # Create a dummy image

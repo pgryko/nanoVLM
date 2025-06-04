@@ -114,7 +114,10 @@ nanoVLM now supports evaluation using the comprehensive lmms-eval toolkit:
 
 ```bash
 # Install lmms-eval (optional)
-pip install lmms-eval
+uv pip install git+https://github.com/EvolvingLMMs-Lab/lmms-eval.git
+
+# Make sure you have your environment variables set correctly
+export HF_HOME="<Path to HF cache>"
 
 # Evaluate a trained model on multiple benchmarks
 python evaluate_with_lmms.py --model_path lusxvr/nanoVLM-222M --tasks mmstar,mme
