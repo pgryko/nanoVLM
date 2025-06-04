@@ -18,7 +18,7 @@ def main():
     parser.add_argument(
         "--model_path", 
         type=str, 
-        default="lusxvr/nanoVLM-222M",
+        default="lusxvr/nanoVLM-450M",
         help="Path to the model (local or HuggingFace Hub)"
     )
     parser.add_argument(
@@ -30,7 +30,7 @@ def main():
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=8,
+        default=32,
         help="Batch size for evaluation"
     )
     parser.add_argument(

@@ -27,7 +27,7 @@ def run_lmms_evaluation(
     image_processor,
     tasks: List[str],
     device: str = "cuda",
-    batch_size: int = 8,
+    batch_size: int = 32,
     num_fewshot: Optional[int] = None,
     limit: Optional[int] = None,
     output_path: Optional[str] = None,
@@ -387,7 +387,7 @@ def evaluate_vlm_benchmarks(
     image_processor,
     benchmarks: Optional[List[str]] = None,
     device: str = "cuda",
-    batch_size: int = 8,
+    batch_size: int = 32,
     output_dir: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> Dict[str, Any]:
