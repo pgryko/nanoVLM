@@ -89,9 +89,11 @@ class NanoVLMWrapper(lmms):
 
     def flatten(self, input):
         new_list = []
-        for i in input:
-            for j in i:
-                new_list.append(j)
+        for sublist in input:
+            # for i in sublist:
+            #     new_list.append(i)
+            # We can only process one image per request, so we take the first one
+            new_list.append(sublist[0])
         return new_list
     
     def generate_until(self, requests: List[Instance]) -> List[str]:
