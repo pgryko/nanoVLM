@@ -184,19 +184,21 @@ Understanding the VRAM requirements for training is crucial for selecting the ri
 Here's a breakdown of the approximate peak VRAM usage:
 
 ```
-VRAM allocated after loading model to device: 870.53 MB
---- Summary of VRAM Usage (Default Model) ---
-Batch Size 1:   4439.02 MB
-Batch Size 2:   4461.05 MB
-Batch Size 4:   4515.27 MB
-Batch Size 8:   5062.60 MB
-Batch Size 16:  6989.32 MB
-Batch Size 32:  10880.09 MB
-Batch Size 64:  18584.00 MB
-Batch Size 128: 34043.34 MB
-Batch Size 256: 64944.37 MB
-Batch Size 512: OOM (Peak before OOM: 80228.30 MB)
+VRAM allocated after loading model to device: 871.44 MB
+--- Summary of VRAM Usage ---
+Batch Size 1: 4448.58 MB
+Batch Size 2: 4465.39 MB
+Batch Size 4: 4532.29 MB
+Batch Size 8: 5373.46 MB
+Batch Size 16: 7604.36 MB
+Batch Size 32: 12074.31 MB
+Batch Size 64: 20995.06 MB
+Batch Size 128: 38834.19 MB
+Batch Size 256: 74561.08 MB
+Batch Size 512: OOM (Peak before OOM: 80247.67 MB)
 ```
+
+Note that the VRAM measurement was performed on a small setup using 'SmolLM2-135M' with a maximum input sequence length of 128 tokens. This may differ from the current default configuration in the project.
 
 **Key Takeaways:**
 - You'll need at least ~4.5 GB of VRAM to train the default model even with a batch size of 1.
