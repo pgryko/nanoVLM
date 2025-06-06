@@ -24,9 +24,9 @@ from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
 import models.config as config
 import models.utils as utils
-from eval.evaluation import run_lmms_evaluation, print_evaluation_results
+from evaluation import run_lmms_evaluation
 
-#Otherwise, the tokenizer will through a warning
+#Otherwise, the tokenizer will throw a warning
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -143,7 +143,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
         collate_fn=vqa_collator,
         num_workers=8,
         pin_memory=True,
-        drop_last=False,  # Changed to False to handle small validation sets
+        drop_last=True,
         worker_init_fn=seed_worker,
         generator=g,
     )
@@ -203,15 +203,14 @@ def get_lr(it, max_lr, max_steps):
 def train(train_cfg, vlm_cfg):
     train_loader, val_loader, test_loader = get_dataloaders(train_cfg, vlm_cfg)
     tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens)
+    image_processor = get_image_processor(vlm_cfg.vit_img_size)
+
 
     total_dataset_size = len(train_loader.dataset)
     if train_cfg.log_wandb and is_master():
         run_name = get_run_name(train_cfg, vlm_cfg)
         if train_cfg.data_cutoff_idx is None:
             run_name = run_name.replace("full_ds", f"{total_dataset_size}samples")
-
-        if os.getenv("WANDB_API_KEY") is not None:
-            wandb.login(key=os.getenv("WANDB_API_KEY")) # add this line to force wandb to login, otherwise it will throw an error that do not have permission to upsert bucket.
 
         run = wandb.init(
             entity=train_cfg.wandb_entity,
@@ -364,12 +363,11 @@ def train(train_cfg, vlm_cfg):
                         lmms_results = {}
                         if train_cfg.use_lmms_eval and train_cfg.lmms_eval_tasks:
                             print(f"\nRunning lmms-eval on tasks: {train_cfg.lmms_eval_tasks}")
-                            image_processor = get_image_processor(vlm_cfg.vit_img_size)
                             eval_results = run_lmms_evaluation(
                                 model=eval_model,
                                 tokenizer=tokenizer,
                                 image_processor=image_processor,
-                                tasks=list(train_cfg.lmms_eval_tasks),
+                                tasks=[train_cfg.lmms_eval_tasks] if isinstance(train_cfg.lmms_eval_tasks, str) else list(train_cfg.lmms_eval_tasks),
                                 device=device,
                                 batch_size=train_cfg.lmms_eval_batch_size,
                                 limit=train_cfg.lmms_eval_limit,
@@ -380,9 +378,7 @@ def train(train_cfg, vlm_cfg):
                                     # Get the primary metric for each task
                                     for metric_name, metric_value in task_results.items():
                                         if isinstance(metric_value, (int, float)):
-                                            lmms_results[f"lmms_{task_name}_{metric_name}"] = metric_value
-                                            break  # Use first numeric metric as primary
-                            print_evaluation_results(eval_results)
+                                            lmms_results[f"lmms_{task_name}_{metric_name.split(',')[0]}"] = metric_value
                         
                         if epoch_accuracy > best_accuracy:
                             best_accuracy = epoch_accuracy
