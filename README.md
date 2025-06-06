@@ -53,15 +53,14 @@ uv init --bare --python 3.12
 uv sync --python 3.12
 source .venv/bin/activate
 uv add torch numpy torchvision pillow datasets huggingface-hub transformers wandb
-# Optional: for lmms-eval integration
-uv add lmms-eval
+# Optional: for lmms-eval integration you have to install it from source, see section 'Evaluation with lmms-eval'
 ```
 
 If you prefer another environment manager, simply install these packages:  
 ```bash
 pip install torch numpy torchvision pillow datasets huggingface-hub transformers wandb
-# Optional: for lmms-eval integration  
-pip install lmms-eval
+# Optional: for lmms-eval integration you have to install it from source, see section 'Evaluation with lmms-eval'
+
 ```
 Dependencies: 
 - `torch` <3
@@ -77,8 +76,6 @@ Dependencies:
 To train nanoVLM, you can simply use the provided training script. After training, your model gets uploaded to the Hub!
 ```bash
 wandb login --relogin
-export WANDB_API_KEY="PLACEHOLDER" # Replace with your actual API key
-
 huggingface-cli login
 python train.py
 ```
@@ -113,7 +110,7 @@ Generation 5:  This is a cat sitting on the ground, which is covered with a mat.
 nanoVLM now supports evaluation using the comprehensive lmms-eval toolkit:
 
 ```bash
-# Install lmms-eval (optional)
+# Install lmms-eval (has to be from source)
 uv pip install git+https://github.com/EvolvingLMMs-Lab/lmms-eval.git
 
 # Make sure you have your environment variables set correctly and you are logged in to HF
