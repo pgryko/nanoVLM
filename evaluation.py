@@ -80,6 +80,7 @@ def run_lmms_evaluation(
     class SimpleArgs:
         def __init__(self):
             self.process_with_media = True  # Set to True for VLM tasks
+            self.output_path = '.' #Otherwise e.g. Ocrbench will throw an error
     
     cli_args = SimpleArgs()
     
