@@ -98,13 +98,13 @@ def get_dataloaders(train_cfg, vlm_cfg):
     val_size = int(total_samples * train_cfg.val_ratio)
     train_size = total_samples - val_size
 
-    train_dataset = VQADataset(train_ds.select(range(train_size)), tokenizer, image_processor)
-    val_dataset = VQADataset(train_ds.select(range(train_size, total_samples)), tokenizer, image_processor)
-    test_dataset = MMStarDataset(test_ds['val'], tokenizer, image_processor)
+    train_dataset = VQADataset(train_ds.select(range(train_size)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
+    val_dataset = VQADataset(train_ds.select(range(train_size, total_samples)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
+    test_dataset = MMStarDataset(test_ds['val'], tokenizer, image_processor, vlm_cfg.mp_image_token_length)
 
     # Create collators
-    vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length, vlm_cfg.mp_image_token_length)
-    mmstar_collator = MMStarCollator(tokenizer, vlm_cfg.mp_image_token_length)
+    vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length)
+    mmstar_collator = MMStarCollator(tokenizer)
 
     g = torch.Generator()
     g.manual_seed(0)
