@@ -29,13 +29,13 @@ class VQADataset(Dataset):  # Visual Question Answering Dataset
             if isinstance(image, Image.Image):
                 if image.mode != 'RGB':
                     image = image.convert('RGB')
-                    processed_image = self.image_processor(image)
-                    processed_images.append(processed_image)
-                else:
-                    print(f"Error processing image at index {idx}")
-                    # Create empty tensor with right dimensions as fallback
-                    processed_images.append(torch.zeros(
-                        3, cfg.VLMConfig.vit_img_size, cfg.VLMConfig.vit_img_size))
+                processed_image = self.image_processor(image)
+                processed_images.append(processed_image)
+            else:
+                print(f"Error processing image at index {idx}")
+                # Create empty tensor with right dimensions as fallback
+                processed_images.append(torch.zeros(
+                    3, cfg.VLMConfig.vit_img_size, cfg.VLMConfig.vit_img_size))
 
         # Process text (should be a list)
         text_data = item['texts']

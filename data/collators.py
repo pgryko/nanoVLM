@@ -66,7 +66,8 @@ class VQACollator(BaseCollator):  # Visual Question Answering Collator
         messages_batched = [item["text_data"] for item in batch]
 
         # Stack images
-        images = torch.stack(images)
+        imgs = [img for sublist in images for img in sublist]
+        images = torch.stack(imgs)
 
         # Create inputs by concatenating special image tokens, question, and answer
         input_sequences, loss_masks = self.format_messages_for_loss(messages_batched)
@@ -84,18 +85,18 @@ class VQACollator(BaseCollator):  # Visual Question Answering Collator
         
         # Pad and align loss masks accordingly
         loss_masks_padded = []
-        for i, input_ids in enumerate(encoded_full_sequences["input_ids"]):
-            length = len(input_ids)
+        for i, input_row in enumerate(encoded_full_sequences["input_ids"]):
+            length = len(input_row)
             unpadded_mask = loss_masks[i][-self.max_length:]  # truncate from the left
             pad_len = length - len(unpadded_mask)
             padded = [0] * pad_len + unpadded_mask
             loss_masks_padded.append(padded)
 
-        loss_masks_tensor = torch.tensor(loss_masks_padded)
+        loss_masks_tensor = torch.tensor(loss_masks_padded).to(torch.bool)
         
         # Create labels where only answer tokens are predicted
-        labels = loss_masks_tensor * input_ids.clone()
-        labels[:, :-1] = loss_masks_tensor[:, 1:].clone() * input_ids[:, 1:].clone() # Shift labels for causal LM
+        labels = input_ids.clone().masked_fill(~loss_masks_tensor, -100)
+        labels[:, :-1] = labels[:, 1:] # Shift labels for causal LM
         labels[:, -1] = -100 # Last token has no target
 
         # Determine original lengths before padding/truncation to handle truncation cases
@@ -137,8 +138,8 @@ class MMStarCollator(BaseCollator):  # https://huggingface.co/datasets/Lin-Chen/
 
         # Pad and align loss masks accordingly
         loss_masks_padded = []
-        for i, input_ids in enumerate(encoded_sequences["input_ids"]):
-            length = len(input_ids)
+        for i, input_row in enumerate(encoded_sequences["input_ids"]):
+            length = len(input_row)
             unpadded_mask = loss_masks[i]  # truncate from the left
             pad_len = length - len(unpadded_mask)
             padded = [0] * pad_len + unpadded_mask
