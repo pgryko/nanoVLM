@@ -24,7 +24,6 @@ from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
 import models.config as config
 import models.utils as utils
-from evaluation import run_lmms_evaluation
 
 #Otherwise, the tokenizer will throw a warning
 import os
@@ -362,23 +361,7 @@ def train(train_cfg, vlm_cfg):
                         # Run additional lmms-eval benchmarks if enabled
                         lmms_results = {}
                         if train_cfg.use_lmms_eval and train_cfg.lmms_eval_tasks:
-                            print(f"\nRunning lmms-eval on tasks: {train_cfg.lmms_eval_tasks}")
-                            eval_results = run_lmms_evaluation(
-                                model=eval_model,
-                                tokenizer=tokenizer,
-                                image_processor=image_processor,
-                                tasks=[train_cfg.lmms_eval_tasks] if isinstance(train_cfg.lmms_eval_tasks, str) else list(train_cfg.lmms_eval_tasks),
-                                device=device,
-                                batch_size=train_cfg.lmms_eval_batch_size,
-                                limit=train_cfg.lmms_eval_limit,
-                                output_path=os.path.join(vlm_cfg.vlm_checkpoint_path, run_name, f"lmms_eval_step_{global_step}.json") if train_cfg.save_lmms_results else None,
-                            )
-                            if eval_results and "results" in eval_results:
-                                for task_name, task_results in eval_results["results"].items():
-                                    # Get the primary metric for each task
-                                    for metric_name, metric_value in task_results.items():
-                                        if isinstance(metric_value, (int, float)):
-                                            lmms_results[f"lmms_{task_name}_{metric_name.split(',')[0]}"] = metric_value
+                            print("lmms-eval integration not yet implemented in training")
                         
                         if epoch_accuracy > best_accuracy:
                             best_accuracy = epoch_accuracy

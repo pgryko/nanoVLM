@@ -23,15 +23,16 @@ class NanoVLMWrapper(lmms):
     
     def __init__(
         self,
-        model: VisionLanguageModel,
-        tokenizer=None,
-        image_processor=None,
+        model: str | VisionLanguageModel = "lusxvr/nanoVLM-450M",
         device: str = "cuda",
         batch_size: int = 32,
         **kwargs
     ):
         super().__init__()
-        self.model = model
+        if isinstance(model, str):
+            self.model = VisionLanguageModel.from_pretrained(model).to(device)
+        else:
+            self.model = model.to(device)
         self.device = device
         self.batch_size = batch_size
         
@@ -48,15 +49,8 @@ class NanoVLMWrapper(lmms):
         self.accelerator = DummyAccelerator()
         
         # Get tokenizer and image processor from model config if not provided
-        if tokenizer is None:
-            self.tokenizer = get_tokenizer(model.cfg.lm_tokenizer, model.cfg.vlm_extra_tokens)
-        else:
-            self.tokenizer = tokenizer
-            
-        if image_processor is None:
-            self.image_processor = get_image_processor(model.cfg.vit_img_size)
-        else:
-            self.image_processor = image_processor
+        self.tokenizer = get_tokenizer(self.model.cfg.lm_tokenizer, self.model.cfg.vlm_extra_tokens)
+        self.image_processor = get_image_processor(self.model.cfg.vit_img_size)
             
     def _prepare_visual_input(self, visual_list: List[Image.Image]) -> Optional[torch.Tensor]:
         """Convert visual inputs to model format."""
