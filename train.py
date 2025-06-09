@@ -260,6 +260,7 @@ def train(train_cfg, vlm_cfg):
 
     epoch_times = []
     best_accuracy = 0
+    best_val_loss = float('inf')
     global_step = 0
     for epoch in range(train_cfg.epochs):
         epoch_start_time = time.time()
@@ -335,6 +336,7 @@ def train(train_cfg, vlm_cfg):
                 if device == "cuda":
                     torch.cuda.empty_cache()
                 with torch.no_grad():
+                    save = False
                     total_val_loss = 0
                     for batch in val_loader:
                         images = batch["image"].to(device)
@@ -348,6 +350,9 @@ def train(train_cfg, vlm_cfg):
                         total_val_loss += loss.item()
                     avg_val_loss = total_val_loss / len(val_loader)
                     avg_val_loss = mean(dist_gather(avg_val_loss)) if is_dist() else avg_val_loss
+                    if avg_val_loss < best_val_loss:
+                        best_val_loss = avg_val_loss
+                        save = True
                     if train_cfg.log_wandb and is_master():
                         run.log({"val_loss": avg_val_loss}, step=global_step)
 
@@ -356,6 +361,8 @@ def train(train_cfg, vlm_cfg):
                         epoch_accuracy = test_mmstar(eval_model, tokenizer, test_loader, device)
                         if epoch_accuracy > best_accuracy:
                             best_accuracy = epoch_accuracy
+                            save = True
+                        if save:
                             eval_model.save_pretrained(save_directory=os.path.join(vlm_cfg.vlm_checkpoint_path, run_name))
                         if train_cfg.log_wandb and is_master():    
                             run.log({"accuracy": epoch_accuracy}, step=global_step)
