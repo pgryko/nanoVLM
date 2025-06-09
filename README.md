@@ -107,7 +107,7 @@ Generation 5:  This is a cat sitting on the ground, which is covered with a mat.
 
 ### Evaluation with lmms-eval
 
-nanoVLM now supports evaluation using the comprehensive lmms-eval toolkit:
+nanoVLM now supports evaluation using the comprehensive [lmms-eval](https://github.com/EvolvingLMMs-Lab/lmms-eval) toolkit:
 
 ```bash
 # Install lmms-eval (has to be from source)

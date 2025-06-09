@@ -202,7 +202,6 @@ def get_lr(it, max_lr, max_steps):
 def train(train_cfg, vlm_cfg):
     train_loader, val_loader, test_loader = get_dataloaders(train_cfg, vlm_cfg)
     tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens)
-    image_processor = get_image_processor(vlm_cfg.vit_img_size)
 
 
     total_dataset_size = len(train_loader.dataset)
@@ -210,7 +209,6 @@ def train(train_cfg, vlm_cfg):
         run_name = get_run_name(train_cfg, vlm_cfg)
         if train_cfg.data_cutoff_idx is None:
             run_name = run_name.replace("full_ds", f"{total_dataset_size}samples")
-
         run = wandb.init(
             entity=train_cfg.wandb_entity,
             project="nanoVLM",
@@ -357,17 +355,11 @@ def train(train_cfg, vlm_cfg):
                     if is_master() and global_step % (train_cfg.eval_interval*2) == 0:
                         eval_model = model.module if is_dist() else model  # unwrap the model for eval if DDP
                         epoch_accuracy = test_mmstar(eval_model, tokenizer, test_loader, device)
-                        
-                        # Run additional lmms-eval benchmarks if enabled
-                        lmms_results = {}
-                        if train_cfg.use_lmms_eval and train_cfg.lmms_eval_tasks:
-                            print("lmms-eval integration not yet implemented in training")
-                        
                         if epoch_accuracy > best_accuracy:
                             best_accuracy = epoch_accuracy
                             eval_model.save_pretrained(save_directory=os.path.join(vlm_cfg.vlm_checkpoint_path, run_name))
                         if train_cfg.log_wandb and is_master():    
-                            run.log({"accuracy": epoch_accuracy, **lmms_results}, step=global_step)
+                            run.log({"accuracy": epoch_accuracy}, step=global_step)
                         print(f"Step: {global_step}, Loss: {batch_loss:.4f}, Tokens/s: {tokens_per_second:.2f}, Accuracy: {epoch_accuracy:.4f}")
                     elif is_master() and not global_step % (train_cfg.eval_interval*4) == 0:
                         print(f"Step: {global_step}, Loss: {batch_loss:.4f}, Tokens/s: {tokens_per_second:.2f}")

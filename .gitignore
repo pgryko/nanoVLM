@@ -25,5 +25,4 @@ uv.lock
 checkpoints/
 notebooks/
 results/
-submissions/
 *.slurm
