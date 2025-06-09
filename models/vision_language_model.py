@@ -37,19 +37,20 @@ class VisionLanguageModel(nn.Module):
         """
         Replace every image-token placeholder in `input_ids` with the corresponding slice
         from `image_embd`. Supports an arbitrary number of image-token placeholders per sample.
+        The first example in the batch might have 2 images and the second none.
         """
         # Clone the original embeddings to avoid in-place issues
         updated_token_embd = token_embd.clone()
 
         # Build a mask of all image-token positions: shape [B, T_seq]
         mask = (input_ids == self.tokenizer.image_token_id)
-        updated_token_embd[mask] = image_embd.view(-1, image_embd.size(-1)) # torch flattens before assigning
+        updated_token_embd[mask] = image_embd.view(-1, image_embd.size(-1)).to(updated_token_embd.dtype) # torch flattens before assigning
 
         return updated_token_embd
 
     def forward(self, input_ids, image, attention_mask=None, targets=None):
         image_embd = self.vision_encoder(image)
-        image_embd = self.MP(image_embd) # [B, mp_image_token_length, D_lm]
+        image_embd = self.MP(image_embd) # [num_images, mp_image_token_length, D_lm]
 
         token_embd = self.decoder.token_embedding(input_ids) # [B, T_sequence, D_lm]
         
