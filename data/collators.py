@@ -1,29 +1,6 @@
 import torch
 
 
-# Our proposed greedy knapsack method
-def balanced_greedy_knapsack(samples, L, delta=20):
-    # Step 1: Sort the samples
-    samples.sort(reverse=True)
-    total_length = sum(samples)
-    min_knapsacks = (total_length + L - 1) // L + delta
-    # Step 2: Initialize knapsacks
-    knapsacks=[[] for _ in range(min_knapsacks) ]
-    knapsack_lengths = [0] * min_knapsacks
-    # Step 3: Distribute samples across knapsacks
-    ks_index = 0
-    sample_index = 0
-    while sample_index < len(samples): length = samples[sample_index]
-    if knapsack_lengths[ks_index]+length<=L: 
-        knapsacks[ks_index].append(length) 
-        knapsack_lengths[ks_index] += length 
-        sample_index += 1
-    else:
-        knapsacks.append([]) 
-        knapsack_lengths.append(0)
-        ks_index = min(range(len(knapsack_lengths)), key=knapsack_lengths.__getitem__)
-    return knapsacks
-
 class BaseCollator(object):
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
