@@ -27,34 +27,60 @@ def balanced_greedy_knapsack(samples, L, delta=20):
 class BaseCollator(object):
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
-        tokenizer.chat_template = tokenizer.chat_template.replace("{% if loop.first and messages[0]['role'] != 'system' %}{{ '<|im_start|>system\nYou are a helpful AI assistant named SmolLM, trained by Hugging Face<|im_end|>\n' }}{% endif %}", "")  # hack for smollm's chat template which is too verbose for training
-        self.image_token_str = tokenizer.image_token
-        self.len_assistant_tokens = len(self.tokenizer.encode("<|im_start|>assistant\n"))
-        self.len_newline_tokens = len(self.tokenizer.encode("\n"))
+        random_string_5_letters = "xzyvd"
+        random_string_chat_templated = self.tokenizer.apply_chat_template([{"role": "assistant", "content": random_string_5_letters}], tokenize=False, add_special_tokens=False)
+        random_string_location = random_string_chat_templated.find(random_string_5_letters)
+
+        self.prefix_len = len(self.tokenizer.encode(random_string_chat_templated[:random_string_location]))
     
-    def format_messages_for_loss(self, batched_messages):
-        input_sequences = []
-        loss_masks = []
+    def prepare_inputs_and_loss_mask(self, batched_messages, max_length=None):
+        batch_token_ids: list[list[int]] = []
+        batch_masks:     list[list[int]] = []
+        batch_attentions: list[list[int]] = []
 
         for messages in batched_messages:
-            full_text = ""
-            mask = []
+            conv_ids = self.tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=True,
+                    add_special_tokens=False,
+                    return_dict=True,
+                )
+            mask = [0] * len(conv_ids["input_ids"])
 
-            for message in messages:
-                segment = self.tokenizer.apply_chat_template([message], tokenize=False)
-                tokens = self.tokenizer(segment, add_special_tokens=False)["input_ids"]
-                full_text += segment
+            # Locate each assistant turn and flip its mask to 1
+            cursor = 0
+            for msg in messages:
+                segment_ids = self.tokenizer.apply_chat_template(
+                    [msg], tokenize=True, add_special_tokens=False
+                )
+                seg_len = len(segment_ids)
 
-                # Mark loss only on assistant tokens
-                if message["role"] == "assistant":
-                    mask.extend([0] * self.len_assistant_tokens + [1] * (len(tokens) - self.len_assistant_tokens - self.len_newline_tokens) + [0] * self.len_newline_tokens)
-                else:
-                    mask.extend([0] * len(tokens))
+                if msg["role"] == "assistant":
+                    start = cursor + self.prefix_len
+                    end   = cursor + seg_len
+                    mask[start:end] = [1] * (end - start)  # attend to these tokens
 
-            input_sequences.append(full_text)
-            loss_masks.append(mask)
+                cursor += seg_len
 
-        return input_sequences, loss_masks        
+            batch_token_ids.append(conv_ids["input_ids"])
+            batch_masks.append(mask)
+            batch_attentions.append(conv_ids["attention_mask"])
+
+        if max_length is not None:  # We need to keep the tokens to allow for the img embed replacing logic to work. Otherwise, we would need to track which images correspond to long samples.
+            batch_token_ids = [ids[:max_length] for ids in batch_token_ids]
+            batch_masks = [m if len(m) <= max_length else [0]*max_length for m in batch_masks] # Ignore samples that are longer than max_length
+            batch_attentions = [a[:max_length] for a in batch_attentions]
+
+        # Pad samples to max length
+        if max_length is not None:
+            max_len = max_length
+        else:
+            max_len = max(map(len, batch_token_ids))
+        batch_token_ids = [[self.tokenizer.pad_token_id]*(max_len-len(ids)) + ids for ids in batch_token_ids]
+        batch_masks     = [[0]*(max_len-len(m)) + m         for m   in batch_masks]
+        batch_attentions = [[0]*(max_len-len(a)) + a         for a   in batch_attentions]
+
+        return torch.tensor(batch_token_ids), torch.tensor(batch_attentions), torch.tensor(batch_masks).to(torch.bool)
 
 class VQACollator(BaseCollator):  # Visual Question Answering Collator
     def __init__(self, tokenizer, max_length):
@@ -70,50 +96,18 @@ class VQACollator(BaseCollator):  # Visual Question Answering Collator
         images = torch.stack(imgs)
 
         # Create inputs by concatenating special image tokens, question, and answer
-        input_sequences, loss_masks = self.format_messages_for_loss(messages_batched)
+        batch_input_ids, batch_attention_mask, loss_masks = self.prepare_inputs_and_loss_mask(messages_batched, max_length=self.max_length)
 
-        encoded_full_sequences = self.tokenizer.batch_encode_plus(
-            input_sequences,
-            padding="max_length",
-            padding_side="left",
-            return_tensors="pt",
-            truncation=True,
-            max_length=self.max_length,
-        )
-        input_ids = encoded_full_sequences["input_ids"]
-        attention_mask = encoded_full_sequences["attention_mask"]
-        
-        # Pad and align loss masks accordingly
-        loss_masks_padded = []
-        for i, input_row in enumerate(encoded_full_sequences["input_ids"]):
-            length = len(input_row)
-            unpadded_mask = loss_masks[i][-self.max_length:]  # truncate from the left
-            pad_len = length - len(unpadded_mask)
-            padded = [0] * pad_len + unpadded_mask
-            loss_masks_padded.append(padded)
-
-        loss_masks_tensor = torch.tensor(loss_masks_padded).to(torch.bool)
-        
         # Create labels where only answer tokens are predicted
-        labels = input_ids.clone().masked_fill(~loss_masks_tensor, -100)
+        labels = batch_input_ids.clone().masked_fill(~loss_masks, -100)
         labels[:, :-1] = labels[:, 1:] # Shift labels for causal LM
         labels[:, -1] = -100 # Last token has no target
 
-        # Determine original lengths before padding/truncation to handle truncation cases
-        original_lengths = [len(self.tokenizer.encode(seq)) for seq in input_sequences]
-
-        for i in range(len(batch)):
-            # Case 1: If sequence was truncated (original is longer than max_length)
-            if original_lengths[i] > self.max_length:
-                labels[i, :] = -100 # Ignore this sample entirely
-                # print(f"Sample {i} truncated: original length {original_lengths[i]} exceeds max_length {self.max_length}. Ignoring sample.")
-                continue
-
         return {
             "image": images,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "labels": labels
+            "input_ids": batch_input_ids,
+            "attention_mask": batch_attention_mask,
+            "labels": labels,
         }
 
 class MMStarCollator(BaseCollator):  # https://huggingface.co/datasets/Lin-Chen/MMStar
@@ -127,29 +121,11 @@ class MMStarCollator(BaseCollator):  # https://huggingface.co/datasets/Lin-Chen/
         # Stack images
         images = torch.stack(images)
         # Create inputs by concatenating special image tokens, question, and answer
-        input_sequences, loss_masks = self.format_messages_for_loss(messages_batched)
+        batch_input_ids, batch_attention_mask, loss_masks = self.prepare_inputs_and_loss_mask(messages_batched)
 
-        encoded_sequences = self.tokenizer.batch_encode_plus(
-            input_sequences,
-            padding=True,
-            padding_side="left",
-            return_tensors="pt"
-        )
-
-        # Pad and align loss masks accordingly
-        loss_masks_padded = []
-        for i, input_row in enumerate(encoded_sequences["input_ids"]):
-            length = len(input_row)
-            unpadded_mask = loss_masks[i]  # truncate from the left
-            pad_len = length - len(unpadded_mask)
-            padded = [0] * pad_len + unpadded_mask
-            loss_masks_padded.append(padded)
-
-        loss_masks_tensor = torch.tensor(loss_masks_padded).to(torch.bool)
-
-        input_ids = encoded_sequences['input_ids'].masked_fill(loss_masks_tensor, self.tokenizer.pad_token_id)
-        attention_mask = encoded_sequences['attention_mask'].masked_fill(loss_masks_tensor, 0)
-        labels = encoded_sequences['input_ids'].clone().masked_fill(~loss_masks_tensor, self.tokenizer.pad_token_id)
+        input_ids = batch_input_ids.masked_fill(loss_masks, self.tokenizer.pad_token_id)
+        attention_mask = batch_attention_mask.masked_fill(loss_masks, 0)
+        labels = batch_input_ids.clone().masked_fill(~loss_masks, self.tokenizer.pad_token_id)
 
         return {
             "images": images,

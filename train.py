@@ -77,7 +77,7 @@ def get_run_name(train_cfg, vlm_cfg):
 def get_dataloaders(train_cfg, vlm_cfg):
     # Create datasets
     image_processor = get_image_processor(vlm_cfg.vit_img_size)
-    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens)
+    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens, vlm_cfg.lm_chat_template)
 
     # Load and combine all training datasets
     combined_train_data = []
@@ -170,8 +170,7 @@ def test_mmstar(model, tokenizer, test_loader, device):
             attention_mask = batch['attention_mask'].to(device)
 
             correct_answer = tokenizer.batch_decode(labels, skip_special_tokens=True)
-            
-            gen = model.generate(input_ids, image, attention_mask, greedy=True)
+            gen = model.generate(input_ids, image, attention_mask, greedy=True, max_new_tokens=10)
             model_output = tokenizer.batch_decode(gen, skip_special_tokens=True)
             
             is_correct = utils.check_multiple_choice_with_regex(model_output, correct_answer)
@@ -201,7 +200,7 @@ def get_lr(it, max_lr, max_steps):
 
 def train(train_cfg, vlm_cfg):
     train_loader, val_loader, test_loader = get_dataloaders(train_cfg, vlm_cfg)
-    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens)
+    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens, vlm_cfg.lm_chat_template)
 
     total_dataset_size = len(train_loader.dataset)
     if train_cfg.log_wandb and is_master():

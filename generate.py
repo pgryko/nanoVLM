@@ -51,8 +51,9 @@ def main():
     tokenizer = get_tokenizer(model.cfg.lm_tokenizer, model.cfg.vlm_extra_tokens)
     image_processor = get_image_processor(model.cfg.vit_img_size)
 
-    template = f"{tokenizer.image_token * model.cfg.mp_image_token_length}Question: {args.prompt} Answer:"
-    encoded = tokenizer.batch_encode_plus([template], return_tensors="pt")
+    messages = [{"role": "user", "content": tokenizer.image_token * model.cfg.mp_image_token_length + args.prompt}]
+    prompt = tokenizer.apply_chat_template([messages], tokenize=False, add_generation_prompt=True)
+    encoded = tokenizer.batch_encode_plus(prompt, return_tensors="pt")
     tokens = encoded["input_ids"].to(device)
 
     img = Image.open(args.image).convert("RGB")
