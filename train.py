@@ -77,7 +77,7 @@ def get_run_name(train_cfg, vlm_cfg):
 def get_dataloaders(train_cfg, vlm_cfg):
     # Create datasets
     image_processor = get_image_processor(vlm_cfg.vit_img_size)
-    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens)
+    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens, vlm_cfg.lm_chat_template)
 
     # Load and combine all training datasets
     combined_train_data = []
@@ -98,13 +98,13 @@ def get_dataloaders(train_cfg, vlm_cfg):
     val_size = int(total_samples * train_cfg.val_ratio)
     train_size = total_samples - val_size
 
-    train_dataset = VQADataset(train_ds.select(range(train_size)), tokenizer, image_processor)
-    val_dataset = VQADataset(train_ds.select(range(train_size, total_samples)), tokenizer, image_processor)
-    test_dataset = MMStarDataset(test_ds['val'], tokenizer, image_processor)
+    train_dataset = VQADataset(train_ds.select(range(train_size)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
+    val_dataset = VQADataset(train_ds.select(range(train_size, total_samples)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
+    test_dataset = MMStarDataset(test_ds['val'], tokenizer, image_processor, vlm_cfg.mp_image_token_length)
 
     # Create collators
-    vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length, vlm_cfg.mp_image_token_length)
-    mmstar_collator = MMStarCollator(tokenizer, vlm_cfg.mp_image_token_length)
+    vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length)
+    mmstar_collator = MMStarCollator(tokenizer)
 
     g = torch.Generator()
     g.manual_seed(0)
@@ -170,8 +170,7 @@ def test_mmstar(model, tokenizer, test_loader, device):
             attention_mask = batch['attention_mask'].to(device)
 
             correct_answer = tokenizer.batch_decode(labels, skip_special_tokens=True)
-            
-            gen = model.generate(input_ids, image, attention_mask, greedy=True)
+            gen = model.generate(input_ids, image, attention_mask, greedy=True, max_new_tokens=10)
             model_output = tokenizer.batch_decode(gen, skip_special_tokens=True)
             
             is_correct = utils.check_multiple_choice_with_regex(model_output, correct_answer)
@@ -201,7 +200,7 @@ def get_lr(it, max_lr, max_steps):
 
 def train(train_cfg, vlm_cfg):
     train_loader, val_loader, test_loader = get_dataloaders(train_cfg, vlm_cfg)
-    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens)
+    tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens, vlm_cfg.lm_chat_template)
 
 
     total_dataset_size = len(train_loader.dataset)
@@ -261,6 +260,7 @@ def train(train_cfg, vlm_cfg):
 
     epoch_times = []
     best_accuracy = 0
+    best_val_loss = float('inf')
     global_step = 0
     for epoch in range(train_cfg.epochs):
         epoch_start_time = time.time()
@@ -282,10 +282,7 @@ def train(train_cfg, vlm_cfg):
             # Gradients only need to be synced at the end of each accumulation cycle.
             if (is_dist()
                 and train_cfg.gradient_accumulation_steps > 1
-                and not (
-                    (i + 1) % train_cfg.gradient_accumulation_steps == 0 
-                    or i + 1 == len(train_loader)
-                )):
+                and not is_update_step):
                 context = model.no_sync()
             else:
                 context = contextlib.nullcontext()
@@ -336,6 +333,7 @@ def train(train_cfg, vlm_cfg):
                 if device == "cuda":
                     torch.cuda.empty_cache()
                 with torch.no_grad():
+                    save = False
                     total_val_loss = 0
                     for batch in val_loader:
                         images = batch["image"].to(device)
@@ -349,6 +347,9 @@ def train(train_cfg, vlm_cfg):
                         total_val_loss += loss.item()
                     avg_val_loss = total_val_loss / len(val_loader) if len(val_loader) > 0 else 0
                     avg_val_loss = mean(dist_gather(avg_val_loss)) if is_dist() else avg_val_loss
+                    if avg_val_loss < best_val_loss:
+                        best_val_loss = avg_val_loss
+                        save = True
                     if train_cfg.log_wandb and is_master():
                         run.log({"val_loss": avg_val_loss}, step=global_step)
 
@@ -357,6 +358,8 @@ def train(train_cfg, vlm_cfg):
                         epoch_accuracy = test_mmstar(eval_model, tokenizer, test_loader, device)
                         if epoch_accuracy > best_accuracy:
                             best_accuracy = epoch_accuracy
+                            save = True
+                        if save:
                             eval_model.save_pretrained(save_directory=os.path.join(vlm_cfg.vlm_checkpoint_path, run_name))
                         if train_cfg.log_wandb and is_master():    
                             run.log({"accuracy": epoch_accuracy}, step=global_step)
@@ -384,7 +387,7 @@ def train(train_cfg, vlm_cfg):
         epoch_duration = epoch_end_time - epoch_start_time
         epoch_times.append(epoch_duration)
 
-        # gather and sum total_tokens_processed accross all ranks if DDP
+        # gather and sum total_tokens_processed across all ranks if DDP
         total_tokens_processed = sum(dist_gather(total_tokens_processed)) if is_dist() else total_tokens_processed  
         epoch_tokens_per_second = total_tokens_processed / epoch_duration
 
@@ -424,6 +427,7 @@ def main():
     parser.add_argument('--vlm_checkpoint_path', type=str, help='Path to the VLM checkpoint for loading or saving')
     parser.add_argument('--compile', type=bool, help='Use torch.compile to optimize the model')
     parser.add_argument('--resume_from_vlm_checkpoint', type=bool, default=False, help='Resume training from VLM checkpoint specified by vlm_checkpoint_path (or default if not provided)')
+    parser.add_argument('--log_wandb', type=bool, default=True, help='Log to wandb')
 
     args = parser.parse_args()
 
@@ -438,6 +442,8 @@ def main():
         vlm_cfg.vlm_checkpoint_path = args.vlm_checkpoint_path
     if args.compile is not None:
         train_cfg.compile = args.compile
+    if args.log_wandb is not None:
+        train_cfg.log_wandb = args.log_wandb
 
     if args.resume_from_vlm_checkpoint and args.vlm_checkpoint_path is not None:
         train_cfg.resume_from_vlm_checkpoint = True

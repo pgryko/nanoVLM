@@ -6,10 +6,11 @@ import models.config as cfg
 
 
 class VQADataset(Dataset):  # Visual Question Answering Dataset
-    def __init__(self, dataset, tokenizer, image_processor):
+    def __init__(self, dataset, tokenizer, image_processor, mp_image_token_length):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.image_processor = image_processor
+        self.mp_image_token_length = mp_image_token_length
 
     def __len__(self):
         return len(self.dataset)
@@ -17,50 +18,48 @@ class VQADataset(Dataset):  # Visual Question Answering Dataset
     def __getitem__(self, idx):
         item = self.dataset[idx]
 
-        # Handle image (it's a list)
-        image_data = item['images']
-        if isinstance(image_data, list) and len(image_data) > 0:
-            image = image_data[0]
-        else:
-            image = image_data
+        # Handle images (should be a list)
+        images_data = item['images']
+        if not isinstance(images_data, list):
+            images_data = [images_data]
 
-        # Now process the image
-        if isinstance(image, Image.Image):
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            processed_image = self.image_processor(image)
-        else:
-            print(f"Error processing image at index {idx}")
-            # Create empty tensor with right dimensions as fallback
-            processed_image = torch.zeros(
-                3, cfg.VLMConfig.vit_img_size, cfg.VLMConfig.vit_img_size)
+        # Now process the images
+        processed_images = []
+        for image in images_data:
+            if isinstance(image, Image.Image):
+                if image.mode != 'RGB':
+                    image = image.convert('RGB')
+                processed_image = self.image_processor(image)
+                processed_images.append(processed_image)
+            else:
+                raise ValueError(f"Error processing image at index {idx}")
 
-        # Process text (also a list)
+        # Process text (should be a list)
         text_data = item['texts']
-        if isinstance(text_data, list) and len(text_data) > 0:
-            text = text_data[0]
-        else:
-            text = text_data
+        if not isinstance(text_data, list):
+            text_data = [text_data]
 
-        question = text['user']
-        # Add EOS token to the answer to train model to predict it, enabling correct stopping during generation
-        answer = text['assistant'] + self.tokenizer.eos_token
+        messages = []
 
-        formatted_text = f"Question: {question} Answer:"
+        for text in text_data:
+            messages.append({"role": "user", "content": text['user']})
+            messages.append({"role": "assistant", "content": text['assistant']})
+
+        messages[0]["content"] = self.tokenizer.image_token * len(processed_images) * self.mp_image_token_length + messages[0]["content"]      
 
         return {
-            "image": processed_image,
-            "text_data": formatted_text,
-            "answer": answer
+            "images": processed_images,
+            "text_data": messages,
         }
 
 
 class MMStarDataset(Dataset):  # https://huggingface.co/datasets/Lin-Chen/MMStar
-    def __init__(self, dataset, tokenizer, image_processor):
+    def __init__(self, dataset, tokenizer, image_processor, mp_image_token_length):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.image_processor = image_processor
-        
+        self.mp_image_token_length = mp_image_token_length
+
     def __len__(self):
         return len(self.dataset)
     
@@ -75,18 +74,16 @@ class MMStarDataset(Dataset):  # https://huggingface.co/datasets/Lin-Chen/MMStar
                 image = image.convert('RGB')
             processed_image = self.image_processor(image)
         else:
-            print(f"Error processing image at index {idx}")
-            # Create empty tensor with right dimensions as fallback
-            processed_image = torch.zeros(3, cfg.VLMConfig.vit_img_size, cfg.VLMConfig.vit_img_size)
+            raise ValueError(f"Error processing image at index {idx}")
         
-        question = item['question']
-        answer = item['answer'] + self.tokenizer.eos_token # Add EOS token to the answer to train model to predict it, enabling correct stopping during generation
-        
-        formatted_text = f"Question: {question} \nAnswer only with the letter! \nAnswer:"
+        messages = []
+
+        messages.append({"role": "user", "content": item['question'] +  "\nAnswer only with the letter!"})
+        messages.append({"role": "assistant", "content": item['answer']})
+
+        messages[0]["content"] = self.tokenizer.image_token * self.mp_image_token_length + messages[0]["content"]      
         
         return {
             "image": processed_image,
-            "text_data": formatted_text,
-            "answer": answer
+            "text_data": messages,
         }
-    

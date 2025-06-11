@@ -31,44 +31,27 @@ class VisionLanguageModel(nn.Module):
             self.decoder = LanguageModel(cfg)
         self.MP = ModalityProjector(cfg)
         self.load_backbone = load_backbone
-        self.tokenizer = get_tokenizer(cfg.lm_tokenizer, cfg.vlm_extra_tokens)
+        self.tokenizer = get_tokenizer(cfg.lm_tokenizer, cfg.vlm_extra_tokens, cfg.lm_chat_template)
 
     def _replace_img_tokens_with_embd(self, input_ids, token_embd, image_embd):
-        # Vectorized replacement of image token placeholders.
-        # This assumes that `input_ids` contains `self.cfg.mp_image_token_length` placeholders
-        # for image tokens, and `image_embd` has the corresponding features.
+        """
+        Replace every image-token placeholder in `input_ids` with the corresponding slice
+        from `image_embd`. Supports an arbitrary number of image-token placeholders per sample.
+        The first example in the batch might have 2 images and the second none.
+        """
+        # Clone the original embeddings to avoid in-place issues
         updated_token_embd = token_embd.clone()
 
-        # Find the start index of image tokens for each item in the batch.
-        # `torch.argmax` on the boolean mask (cast to int) returns the first index of `True` (value 1).
-        # This relies on image_token_id being present and marking the start of the block.
-        start_indices = torch.argmax((input_ids == self.tokenizer.image_token_id).int(), dim=1) # Shape: [batch_size]
+        # Build a mask of all image-token positions: shape [B, T_seq]
+        mask = (input_ids == self.tokenizer.image_token_id)
+        updated_token_embd[mask] = image_embd.view(-1, image_embd.size(-1)).to(updated_token_embd.dtype) # torch flattens before assigning
 
-        # Create batch indices for advanced indexing.
-        # This tensor will be like [[0,0,..0], [1,1,..1], ..., [B-1,B-1,..B-1]]
-        # where each inner list has length `image_token_len`.
-        batch_idx_fill = torch.arange(input_ids.size(0), device=input_ids.device).unsqueeze(1).expand(-1, self.cfg.mp_image_token_length) # Shape: [batch_size, image_token_len]
-
-        # Create sequence indices for replacement.
-        # `seq_offsets` will be [0, 1, ..., image_token_len-1]
-        seq_offsets = torch.arange(self.cfg.mp_image_token_length, device=input_ids.device).unsqueeze(0) # Shape: [1, image_token_len]
-
-        # `start_indices.unsqueeze(1)` results in shape [batch_size, 1].
-        # Broadcasting with `seq_offsets` gives, for each batch item `b`:
-        # [start_indices[b], start_indices[b]+1, ..., start_indices[b]+image_token_len-1]
-        sequence_idx_fill = start_indices.unsqueeze(1) + seq_offsets # Shape: [batch_size, image_token_len]
-
-        # Perform the replacement using advanced indexing.
-        # `updated_token_embd[batch_idx_fill, sequence_idx_fill]` selects slices of shape [batch_size, image_token_len, D_lm]
-        # `image_embd` also has shape [batch_size, image_token_len, D_lm] (or [B, mp_image_token_length, D_lm])
-        updated_token_embd[batch_idx_fill, sequence_idx_fill] = image_embd.to(updated_token_embd.dtype)
-        
         return updated_token_embd
 
     def forward(self, input_ids, image, attention_mask=None, targets=None):
         if image is not None:
             image_embd = self.vision_encoder(image)
-            image_embd = self.MP(image_embd) # [B, mp_image_token_length, D_lm]
+            image_embd = self.MP(image_embd) # [num_images, mp_image_token_length, D_lm]
 
             token_embd = self.decoder.token_embedding(input_ids) # [B, T_sequence, D_lm]
             

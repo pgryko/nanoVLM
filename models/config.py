@@ -32,6 +32,7 @@ class VLMConfig:
     lm_tie_weights: bool = True # Decide if you want to tie the LM Head weight to the token embedding weights
     lm_model_type: str = 'HuggingFaceTB/SmolLM2-360M-Instruct'
     lm_tokenizer: str = 'HuggingFaceTB/SmolLM2-360M-Instruct'
+    lm_chat_template: str = "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
     lm_eos_token_id: int = 0
 
     mp_pixel_shuffle_factor: int = 2
@@ -45,7 +46,7 @@ class VLMConfig:
 
 @dataclass
 class TrainConfig:
-    lr_mp: float = 0.003
+    lr_mp: float = 0.00512
     lr_backbones: float = 5e-5
     data_cutoff_idx: int = None
     val_ratio: float = 0.025
