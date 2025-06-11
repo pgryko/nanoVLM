@@ -52,9 +52,8 @@ def main():
     image_processor = get_image_processor(model.cfg.vit_img_size)
 
     messages = [{"role": "user", "content": tokenizer.image_token * model.cfg.mp_image_token_length + args.prompt}]
-    prompt = tokenizer.apply_chat_template([messages], tokenize=False, add_generation_prompt=True)
-    encoded = tokenizer.batch_encode_plus(prompt, return_tensors="pt")
-    tokens = encoded["input_ids"].to(device)
+    encoded_prompt = tokenizer.apply_chat_template([messages], tokenize=True, add_generation_prompt=True)
+    tokens = torch.tensor(encoded_prompt).to(device)
 
     img = Image.open(args.image).convert("RGB")
     img_t = image_processor(img).unsqueeze(0).to(device)
