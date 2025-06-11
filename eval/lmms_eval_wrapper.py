@@ -84,10 +84,8 @@ class NanoVLMWrapper(lmms):
     def flatten(self, input):
         new_list = []
         for sublist in input:
-            # for i in sublist:
-            #     new_list.append(i)
-            # We can only process one image per request, so we take the first one
-            new_list.append(sublist[0])
+            for i in sublist:
+                new_list.append(i)
         return new_list
     
     def generate_until(self, requests: List[Instance]) -> List[str]:
@@ -113,44 +111,25 @@ class NanoVLMWrapper(lmms):
             contexts, all_gen_kwargs, doc_to_visual, doc_id, task, split = zip(*chunk)
             visuals = [doc_to_visual[0](self.task_dict[task][split][ids]) for ids, task, split in zip(doc_id, task, split)]
             visuals = self.flatten(visuals)
-            images_tensor = self._prepare_visual_input(visuals)
+            images_tensor = self._prepare_visual_input(visuals).to(self.device)
 
             # Prepare prompts for the batch
             prompts_for_tokenizer = []
             for context_str in contexts:
-                current_prompt_str = ""
-                if images_tensor is not None:
-                    # Prepend image tokens string placeholder
-                    current_prompt_str += self.tokenizer.image_token * self.model.cfg.mp_image_token_length
-                current_prompt_str += f"Question: {context_str} Answer:"
-                prompts_for_tokenizer.append(current_prompt_str)
+                messages = [{"role": "user", "content": self.tokenizer.image_token * self.model.cfg.mp_image_token_length + context_str}]
+                prompt = self.tokenizer.apply_chat_template([messages], tokenize=False, add_generation_prompt=True)
+                prompts_for_tokenizer.append(prompt[0])
             
             # Tokenize the batch of prompts
-            # Assuming all_gen_kwargs[0] is representative for max_new_tokens, or handle per-item if necessary
-            # For simplicity, using a common max_new_tokens, or a default if not specified.
-            # You might need to adjust this if max_new_tokens varies significantly and needs precise handling per request.
-            gen_kwargs = all_gen_kwargs[0] if all_gen_kwargs else {}
-            max_new_tokens_for_padding = gen_kwargs.get("max_new_tokens", 50) # Default from previous implementation
-
             inputs = self.tokenizer(
                 prompts_for_tokenizer,
                 return_tensors="pt",
                 padding="longest",
                 truncation=True,
-                max_length=self.max_length - max_new_tokens_for_padding # Ensure prompt itself fits
+                max_length=self.max_length
             )
             input_ids = inputs["input_ids"].to(self.device)
             attention_mask = inputs["attention_mask"].to(self.device)
-            
-            images_for_model: Optional[torch.Tensor]
-            if images_tensor is not None:
-                images_for_model = images_tensor.to(self.device)
-                # Assuming _prepare_visual_input has handled batching appropriately
-                # such that images_for_model is either None or correctly batched for the model.
-                # If images_for_model.shape[0] is not input_ids.shape[0] and not None,
-                # this implies a more complex image-to-context mapping that model.generate must handle.
-            else:
-                images_for_model = None
 
             # Extract generation parameters for the batch
             # We use the gen_kwargs from the first item in the chunk, assuming they are uniform for the batch.
@@ -168,7 +147,7 @@ class NanoVLMWrapper(lmms):
             # Generate
             generated_ids_batch = self.model.generate(
                 input_ids,
-                images_for_model, # This might be None
+                images_tensor,
                 attention_mask,
                 max_new_tokens=max_new_tokens,
                 greedy=greedy,
