@@ -120,8 +120,11 @@ huggingface-cli login
 # Evaluate a trained model on multiple benchmarks
 python evaluation.py --model lusxvr/nanoVLM-450M --tasks mmstar,mme
 
-# Enable lmms-eval during training for intermediate evaluation
-TODO
+# If you want to log the results to wandb, you have to pass the details in the command
+python evaluation.py
+  --model checkpoints/nanoVLM_siglip2-base-patch16-256_mp2_SmolLM2-360M-Instruct_8xGPU_1630251samples_bs1024_ep5_lr5e-05-0.00512_0611-213529 
+  --tasks mmstar,mmmu,ocrbench,docvqa 
+  --wandb_args project=nanoVLM,name=nanoVLM_siglip2-base-patch16-256_mp2_SmolLM2-360M-Instruct_8xGPU_1630251samples_bs1024_ep5_lr5e-05-0.00512_0611-213529
 ```
 
 ## Hub integration
