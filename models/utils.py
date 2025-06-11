@@ -5,7 +5,8 @@ import torch
 def check_multiple_choice_with_regex(model_outputs, correct_answers):
     results = []
     for model_output, correct_answer in zip(model_outputs, correct_answers):
-        correct_answer = correct_answer.upper()
+        # Strip any trailing newlines and convert to uppercase
+        correct_answer = correct_answer.rstrip('\n').upper()
 
         # Look for the answer letter at the beginning of a line or as the last word
         patterns = [
