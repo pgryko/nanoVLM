@@ -386,7 +386,7 @@ def train(train_cfg, vlm_cfg):
         epoch_duration = epoch_end_time - epoch_start_time
         epoch_times.append(epoch_duration)
 
-        # gather and sum total_tokens_processed accross all ranks if DDP
+        # gather and sum total_tokens_processed across all ranks if DDP
         total_tokens_processed = sum(dist_gather(total_tokens_processed)) if is_dist() else total_tokens_processed  
         epoch_tokens_per_second = total_tokens_processed / epoch_duration
 
