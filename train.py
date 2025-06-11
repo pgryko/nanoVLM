@@ -281,10 +281,7 @@ def train(train_cfg, vlm_cfg):
             # Gradients only need to be synced at the end of each accumulation cycle.
             if (is_dist()
                 and train_cfg.gradient_accumulation_steps > 1
-                and not (
-                    (i + 1) % train_cfg.gradient_accumulation_steps == 0 
-                    or i + 1 == len(train_loader)
-                )):
+                and not is_update_step):
                 context = model.no_sync()
             else:
                 context = contextlib.nullcontext()
