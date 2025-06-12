@@ -87,7 +87,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
     train_ds = concatenate_datasets(combined_train_data)
     
     test_ds = load_dataset(train_cfg.test_dataset_path)
-    train_ds = train_ds.shuffle(seed=0) # Shuffle the training dataset, so train and val get equal contributions from all concatinated datasets
+    train_ds = train_ds.shuffle(seed=0) # Shuffle the training dataset, so train and val get equal contributions from all concatenated datasets
 
     # Apply cutoff if specified
     if train_cfg.data_cutoff_idx is None:
