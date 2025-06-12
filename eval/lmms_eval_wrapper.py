@@ -7,6 +7,7 @@ import torch
 from typing import List, Tuple, Optional, Union
 from PIL import Image
 import numpy as np
+import torch.distributed as dist
 
 from tqdm import tqdm
 
@@ -37,22 +38,17 @@ class NanoVLMWrapper(lmms):
         self.device = device
         self.batch_size = batch_size
         
-        # Set world_size and rank for non-distributed evaluation
-        self._world_size = 1
-        self._rank = 0
-        
-        # Add dummy accelerator for lmms-eval compatibility
-        # This prevents errors when using "accelerate" backend
-        class DummyAccelerator:
-            def wait_for_everyone(self):
-                pass
-        
-        self.accelerator = DummyAccelerator()
+        if dist.is_available() and dist.is_initialized():
+            self._rank = dist.get_rank()
+            self._world_size = dist.get_world_size()
+        else:
+            # Fallback for non-distributed execution
+            self._rank = 0
+            self._world_size = 1
         
         # Get tokenizer and image processor from model config if not provided
-        self.tokenizer = get_tokenizer(self.model.cfg.lm_tokenizer, self.model.cfg.vlm_extra_tokens)
+        self.tokenizer = get_tokenizer(self.model.cfg.lm_tokenizer, self.model.cfg.vlm_extra_tokens, self.model.cfg.lm_chat_template)
         self.image_processor = get_image_processor(self.model.cfg.vit_img_size)
-        self.collator = VQACollator(self.tokenizer, self.model.cfg.lm_max_position_embeddings)
             
     def _prepare_visual_input(self, visual_list: List[Image.Image]) -> Optional[torch.Tensor]:
         """Convert visual inputs to model format."""
