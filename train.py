@@ -18,8 +18,8 @@ torch.manual_seed(0)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(0)
 
-from data.collators import VQACollator, MMStarCollator, BufferedCollator
-from data.datasets import MMStarDataset, VQADataset
+from data.collators import VQACollator, MMStarCollator
+from data.datasets import MMStarDataset, VQADataset, ConstantLengthDataset
 from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
 import models.config as config
@@ -100,13 +100,12 @@ def get_dataloaders(train_cfg, vlm_cfg):
     train_size = total_samples - val_size
 
     train_dataset = VQADataset(train_ds.select(range(train_size)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
+    # train_dataset = ConstantLengthDataset(train_dataset, infinite=False, seq_length=vlm_cfg.lm_max_length, num_of_sequences=256)
     val_dataset = VQADataset(train_ds.select(range(train_size, total_samples)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
     test_dataset = MMStarDataset(test_ds['val'], tokenizer, image_processor, vlm_cfg.mp_image_token_length)
 
     # Create collators
     vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length)
-    buffered_vqa_train_collator = BufferedCollator(vqa_collator, target_batch_size=16)
-    buffered_vqa_val_collator = BufferedCollator(vqa_collator, target_batch_size=16)
     mmstar_collator = MMStarCollator(tokenizer)
 
     g = torch.Generator()
@@ -123,7 +122,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
         train_dataset,
         batch_size=train_cfg.batch_size,    # =per device BS in DDP
         sampler=train_sampler,
-        collate_fn=buffered_vqa_train_collator,
+        collate_fn=vqa_collator,
         num_workers=8,
         pin_memory=True,
         drop_last=True,
@@ -142,7 +141,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
         val_dataset,
         batch_size=train_cfg.batch_size,
         sampler=val_sampler,
-        collate_fn=buffered_vqa_val_collator,
+        collate_fn=vqa_collator,
         num_workers=8,
         pin_memory=True,
         drop_last=True,
