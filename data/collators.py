@@ -19,7 +19,7 @@ class BaseCollator(object):
         else:
             max_len = max(map(len, batch["input_ids"]))
         batch["input_ids"] = [torch.nn.functional.pad(ids, (max_len - len(ids), 0), value=self.tokenizer.pad_token_id) for ids in batch["input_ids"]]
-        batch["labels"]    = [torch.nn.functional.pad(l, (max_len - len(l), 0), value=0) for l in batch["labels"]]
+        batch["labels"]    = [torch.nn.functional.pad(l, (max_len - len(l), 0), value=self.tokenizer.pad_token_id) for l in batch["labels"]]
         batch["attention_mask"] = [torch.nn.functional.pad(a, (max_len - len(a), 0), value=0) for a in batch["attention_mask"]]
 
         return {
