@@ -7,8 +7,8 @@ class BaseCollator(object):
 
     def _pad_batch(self, batch, max_length):
         batch["input_ids"] = [torch.nn.functional.pad(ids, (max_length - len(ids), 0), value=self.tokenizer.pad_token_id) for ids in batch["input_ids"]]
-        batch["labels"]    = [torch.nn.functional.pad(l, (max_length - len(l), 0), value=self.tokenizer.pad_token_id) for l in batch["labels"]]
-        batch["attention_mask"] = [torch.nn.functional.pad(a, (max_length - len(a), 0), value=0) for a in batch["attention_mask"]]
+        batch["labels"]    = [torch.nn.functional.pad(labels, (max_length - len(labels), 0), value=self.tokenizer.pad_token_id) for labels in batch["labels"]]
+        batch["attention_mask"] = [torch.nn.functional.pad(attention_mask, (max_length - len(attention_mask), 0), value=0) for attention_mask in batch["attention_mask"]]
 
     def prepare_batch(self, batch, max_length=None):
         # batch is a list of dicts, each containing "input_ids", "attention_mask", "labels", "images"
@@ -51,8 +51,8 @@ class VQACollator(BaseCollator):  # Visual Question Answering Collator
 
     def _pad_batch(self, batch, max_length):  # Reimplementing to use -100 as the pad value for labels, so that it's ignored by the loss
         batch["input_ids"] = [torch.nn.functional.pad(ids, (max_length - len(ids), 0), value=self.tokenizer.pad_token_id) for ids in batch["input_ids"]]
-        batch["labels"]    = [torch.nn.functional.pad(l, (max_length - len(l), 0), value=-100) for l in batch["labels"]]
-        batch["attention_mask"] = [torch.nn.functional.pad(a, (max_length - len(a), 0), value=0) for a in batch["attention_mask"]]
+        batch["labels"]    = [torch.nn.functional.pad(labels, (max_length - len(labels), 0), value=-100) for labels in batch["labels"]]
+        batch["attention_mask"] = [torch.nn.functional.pad(attention_mask, (max_length - len(attention_mask), 0), value=0) for attention_mask in batch["attention_mask"]]
 
     def __call__(self, batch):
         batch = self.prepare_batch(batch, max_length=self.max_length)
