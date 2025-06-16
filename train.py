@@ -19,12 +19,14 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed_all(0)
 
 from data.collators import VQACollator, MMStarCollator
-from data.datasets import MMStarDataset, VQADataset, ConstantLengthDataset
+from data.datasets import MMStarDataset, VQADataset
+from data.advanced_datasets import ConstantLengthDataset
 from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
 import models.config as config
 import models.utils as utils
 from evaluation import evaluate
+from data.data_utils import synchronized_dataloader_step
 
 #Otherwise, the tokenizer will throw a warning
 import os
@@ -89,7 +91,8 @@ def get_dataloaders(train_cfg, vlm_cfg):
     
     test_ds = load_dataset(train_cfg.test_dataset_path)
     train_ds = train_ds.shuffle(seed=0) # Shuffle the training dataset, so train and val get equal contributions from all concatenated datasets
-    if is_dist():
+    
+    if is_dist():  # We need to shard the dataset in DDP since we are using an iterable dataset instead of the distributed sampler
         train_ds = train_ds.shard(num_shards=get_world_size(), index=get_rank())
 
     # Apply cutoff if specified
@@ -102,9 +105,10 @@ def get_dataloaders(train_cfg, vlm_cfg):
     train_size = total_samples - val_size
 
     train_dataset = VQADataset(train_ds.select(range(train_size)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
-    train_dataset = ConstantLengthDataset(train_dataset, infinite=False, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4)
+    
+    train_dataset = ConstantLengthDataset(train_dataset, infinite=False, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4, queue_size=train_cfg.batch_size*4*2)
     val_dataset = VQADataset(train_ds.select(range(train_size, total_samples)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
-    val_dataset = ConstantLengthDataset(val_dataset, infinite=False, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4)
+    val_dataset = ConstantLengthDataset(val_dataset, infinite=False, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4, queue_size=train_cfg.batch_size*4*2)
     test_dataset = MMStarDataset(test_ds['val'], tokenizer, image_processor, vlm_cfg.mp_image_token_length)
 
     # Create collators
@@ -261,7 +265,7 @@ def train(train_cfg, vlm_cfg):
         optimizer.zero_grad()
         data_load_start = time.time()
 
-        for i, batch in enumerate(train_loader):
+        for i, batch in enumerate(synchronized_dataloader_step(train_loader, is_dist())):
             is_update_step = (i + 1) % train_cfg.gradient_accumulation_steps == 0 or i + 1 == len(train_loader)
             batch_start_time = time.time()
             images = batch["images"]
@@ -377,9 +381,9 @@ def train(train_cfg, vlm_cfg):
                         
                         if train_cfg.log_wandb and is_master():    
                             run.log({"accuracy": epoch_accuracy, **lmms_results}, step=global_step)
-                        print(f"Step: {global_step}, Loss: {batch_loss:.4f}, Tokens/s: {tokens_per_second:.2f}, Accuracy: {epoch_accuracy:.4f}")
+                        print(f"Step: {global_step}, Val Loss: {avg_val_loss:.4f}, Tokens/s: {tokens_per_second:.2f}, Accuracy: {epoch_accuracy:.4f}")
                     elif is_master() and not global_step % (train_cfg.eval_interval*4) == 0:
-                        print(f"Step: {global_step}, Loss: {batch_loss:.4f}, Tokens/s: {tokens_per_second:.2f}")
+                        print(f"Step: {global_step}, Val Loss: {avg_val_loss:.4f}, Tokens/s: {tokens_per_second:.2f}")
 
                 model.train()
 
