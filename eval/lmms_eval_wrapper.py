@@ -136,6 +136,7 @@ class NanoVLMWrapper(lmms):
                 prompts,
                 return_tensors="pt",
                 padding="longest",
+                padding_side="left",
                 truncation=True,
                 max_length=self.max_length
             )
