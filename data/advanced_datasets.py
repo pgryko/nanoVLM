@@ -18,14 +18,28 @@ class ConstantLengthDataset(IterableDataset):
         self.infinite = infinite
         self.queue_size = queue_size
         self._sentinel = object()
+        self._average_length_per_sample = self.dataset.mp_image_token_length + 180
+
 
     def __len__(self):
-        return int(len(self.dataset) * 256/self.seq_length)
+        return int(len(self.dataset) * self._average_length_per_sample/self.seq_length)
 
     def __iter__(self) -> Iterator[dict]:
         """
-        Returns a consumer iterator that drains `self._queue`.
-        A background thread keeps that queue topped up.
+        Returns an iterator over the dataset that yields fixed-length sequences for training.
+        
+        The iterator uses a producer-consumer pattern with a background thread to efficiently
+        pre-fetch and buffer samples. The producer thread continuously reads from the base
+        dataset and fills a queue, while the main thread consumes from the queue.
+
+        The dataset is automatically sharded across workers when using num_workers > 1.
+
+        Returns:
+            Iterator[dict]: An iterator that yields training samples with the following structure:
+                - input_ids: Tensor of token ids of shape (seq_length,)
+                - labels: Tensor of labels of shape (seq_length,) 
+                - attention_mask: Tensor of attention mask of shape (seq_length,)
+                - images: List of processed image tensors
         """
         worker_info = get_worker_info()
         worker_id = worker_info.id if worker_info else 0
@@ -86,8 +100,12 @@ class ConstantLengthDataset(IterableDataset):
                         more_examples = False
                         break
 
-                if len(sample["input_ids"]) > self.seq_length:
+                if len(sample["input_ids"]) >= self.seq_length:
                     continue  # skip overly long samples
+
+                sample["input_ids"] = torch.cat([sample["input_ids"], torch.tensor([self.dataset.tokenizer.pad_token_id])])
+                sample["attention_mask"] = torch.cat([sample["attention_mask"], torch.tensor([0])])
+                sample["labels"] = torch.cat([sample["labels"], torch.tensor([-100])])
 
                 buffer.append(sample)
                 buffer_len += len(sample["input_ids"])
