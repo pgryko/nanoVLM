@@ -4,7 +4,7 @@ import threading
 from queue import Queue
 from typing import Iterator
 import itertools
-
+import random
 
 class ConstantLengthDataset(IterableDataset):
     def __init__(
@@ -209,6 +209,7 @@ class ConstantLengthDataset(IterableDataset):
             knapsack_image_counts[suitable_knapsack] += item_image_count
 
         # remove the completely empty bags that the +delta heuristic created
+        random.shuffle(knapsack_groups)  # Knapsacks are semi-ordered after packing, thanks Luis for noticing!
         return [g for g in knapsack_groups if g]
 
     def _pack_one_group(self, group_indices, batch, max_len):
