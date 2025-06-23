@@ -56,7 +56,10 @@ class TrainConfig:
     max_grad_norm: float = 1.0
     eval_in_epochs: bool = True
     eval_interval: int = 250
-    epochs: int = 5
+    epochs: int = 10
+    max_images_per_example: int = 4
+    max_images_per_knapsack: int = 18
+    max_sample_length: int = 1024
     compile: bool = False
     resume_from_vlm_checkpoint: bool = False # Indicate if the training should be resumed from a checkpoint of the whole VLM or you want to start from scratch
     train_dataset_path: str = 'HuggingFaceM4/the_cauldron'
