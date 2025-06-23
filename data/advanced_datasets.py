@@ -6,6 +6,8 @@ from typing import Iterator
 import itertools
 import random
 
+random.seed(42)  # Set the random seed to the meaning of life for good luck
+
 class ConstantLengthDataset(IterableDataset):
     def __init__(
         self,
