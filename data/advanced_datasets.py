@@ -9,16 +9,21 @@ import itertools
 class ConstantLengthDataset(IterableDataset):
     def __init__(
         self,
-        dataset, infinite: bool = False, seq_length: int = 1024, num_of_sequences: int = 1024, queue_size: int = 2048,
+        dataset, infinite: bool = False, max_sample_length: int = 1024,
+        seq_length: int = 1024, num_of_sequences: int = 1024, queue_size: int = 2048, max_images_per_example: int = 4,
+        max_images_per_knapsack: int = 18
     ):
         self.dataset = dataset
+        self.max_sample_length = max_sample_length
         self.seq_length = seq_length
         self.max_length = seq_length * num_of_sequences
         self.epoch = 0  # only advanced when infinite=True
         self.infinite = infinite
         self.queue_size = queue_size
+        self.max_images_per_example = max_images_per_example
+        self.max_images_per_knapsack = max_images_per_knapsack
         self._sentinel = object()
-        self._average_length_per_sample = self.dataset.mp_image_token_length + 180
+        self._average_length_per_sample = self.dataset.mp_image_token_length + 367 # 367 is the average tokens for the cauldron dataset
 
 
     def __len__(self):
@@ -100,8 +105,10 @@ class ConstantLengthDataset(IterableDataset):
                         more_examples = False
                         break
 
-                if len(sample["input_ids"]) >= self.seq_length:
+                if len(sample["input_ids"]) >= self.max_sample_length:
                     continue  # skip overly long samples
+                if len(sample["images"]) > self.max_images_per_example:
+                    continue  # skip samples that exceed the image constraint
 
                 sample["input_ids"] = torch.cat([sample["input_ids"], torch.tensor([self.dataset.tokenizer.pad_token_id])])
                 sample["attention_mask"] = torch.cat([sample["attention_mask"], torch.tensor([0])])
@@ -114,8 +121,7 @@ class ConstantLengthDataset(IterableDataset):
                 break  # nothing left and not infinite
 
             # ------------- 2) run greedy knapsack & pack groups ------------ #
-            lengths = [len(x["input_ids"]) for x in buffer]
-            groups = self._balanced_greedy_knapsack(lengths, self.seq_length, delta=5)
+            groups = self._balanced_greedy_knapsack(buffer, self.seq_length, delta=5, max_images_per_knapsack=self.max_images_per_knapsack)
 
             for g in groups:
                 packed = self._pack_one_group(g, buffer, self.seq_length)
@@ -133,27 +139,43 @@ class ConstantLengthDataset(IterableDataset):
         # finished → unblock consumer
         queue.put(self._sentinel)
 
-    def _balanced_greedy_knapsack(self, lengths, L, delta=0):
+    def _balanced_greedy_knapsack(self, buffer, L, delta=0, max_images_per_knapsack=None):
+        # Extract lengths and image counts from buffer
+        lengths = [len(x["input_ids"]) for x in buffer]
+        image_counts = [len(x["images"]) for x in buffer]
+        
         # keep the position while sorting
-        items = sorted(enumerate(lengths), key=lambda x: x[1], reverse=True)
+        items = sorted(enumerate(zip(lengths, image_counts)), key=lambda x: x[1][0], reverse=True)
 
         min_knapsacks   = (sum(lengths) + L - 1) // L + delta
         knapsack_load   = [0]   * min_knapsacks
+        knapsack_image_counts = [0] * min_knapsacks
         knapsack_groups = [[] for _ in range(min_knapsacks)]
 
-        for idx, item_len in items:
-            # choose the lightest knapsack so far
-            ks_id = min(range(len(knapsack_load)),
-                        key=knapsack_load.__getitem__)
-
-            # open a new one if the chosen bag would overflow
-            if knapsack_load[ks_id] + item_len > L:
-                ks_id = len(knapsack_load)
-                knapsack_load   .append(0)
+        for idx, (item_len, item_image_count) in items:
+            # Find a suitable knapsack that satisfies both length and image count constraints
+            suitable_knapsack = None
+            
+            # First try to find a knapsack that can fit both constraints
+            for ks_id in sorted(range(len(knapsack_load)), key=knapsack_load.__getitem__):
+                length_fits = knapsack_load[ks_id] + item_len <= L
+                image_fits = (max_images_per_knapsack is None or 
+                             knapsack_image_counts[ks_id] + item_image_count <= max_images_per_knapsack)
+                
+                if length_fits and image_fits:
+                    suitable_knapsack = ks_id
+                    break
+            
+            # If no existing knapsack can fit, create a new one
+            if suitable_knapsack is None:
+                suitable_knapsack = len(knapsack_load)
+                knapsack_load.append(0)
+                knapsack_image_counts.append(0)
                 knapsack_groups.append([])
 
-            knapsack_groups[ks_id].append(idx)
-            knapsack_load  [ks_id] += item_len
+            knapsack_groups[suitable_knapsack].append(idx)
+            knapsack_load[suitable_knapsack] += item_len
+            knapsack_image_counts[suitable_knapsack] += item_image_count
 
         # remove the completely empty bags that the +delta heuristic created
         return [g for g in knapsack_groups if g]

@@ -106,9 +106,11 @@ def get_dataloaders(train_cfg, vlm_cfg):
 
     train_dataset = VQADataset(train_ds.select(range(train_size)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
     
-    train_dataset = ConstantLengthDataset(train_dataset, infinite=False, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4, queue_size=train_cfg.batch_size*4*2)
+    train_dataset = ConstantLengthDataset(train_dataset, infinite=False, max_sample_length=train_cfg.max_sample_length, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4, queue_size=train_cfg.batch_size*4*2,
+                                          max_images_per_example=train_cfg.max_images_per_example, max_images_per_knapsack=train_cfg.max_images_per_knapsack)
     val_dataset = VQADataset(train_ds.select(range(train_size, total_samples)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
-    val_dataset = ConstantLengthDataset(val_dataset, infinite=False, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4, queue_size=train_cfg.batch_size*4*2)
+    # val_dataset = ConstantLengthDataset(val_dataset, infinite=False, max_sample_length=train_cfg.max_sample_length, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4, queue_size=train_cfg.batch_size*4*2,
+    #                                      max_images_per_example=train_cfg.max_images_per_example, max_images_per_knapsack=train_cfg.max_images_per_knapsack)
     test_dataset = MMStarDataset(test_ds['val'], tokenizer, image_processor, vlm_cfg.mp_image_token_length)
 
     # Create collators
@@ -131,9 +133,17 @@ def get_dataloaders(train_cfg, vlm_cfg):
         generator=g,
     )
 
+    val_sampler = DistributedSampler(
+        val_dataset,
+        rank=get_rank(),
+        num_replicas=get_world_size(),
+        shuffle=False  # Usually False for validation
+    )
+
     val_loader = DataLoader(
         val_dataset,
         batch_size=train_cfg.batch_size,
+        sampler=val_sampler,
         collate_fn=vqa_collator,
         num_workers=8,
         pin_memory=True,
@@ -320,14 +330,23 @@ def train(train_cfg, vlm_cfg):
             total_tokens_processed += num_tokens
             post_process_time = time.time() - post_process_start
 
+            images_per_batch = [len(image_pack) for image_pack in images]
+            num_images = sum(images_per_batch)
+            mean_images_per_batch = num_images / len(images_per_batch)
+            min_images_per_batch = min(images_per_batch)
+            max_images_per_batch = max(images_per_batch)
+            mean_images_per_batch = mean(dist_gather(mean_images_per_batch)) if is_dist() else mean_images_per_batch
+            min_images_per_batch = min(dist_gather(min_images_per_batch)) if is_dist() else min_images_per_batch
+            max_images_per_batch = max(dist_gather(max_images_per_batch)) if is_dist() else max_images_per_batch
+
             batch_end_time = time.time()
             batch_duration = batch_end_time - batch_start_time
             tokens_per_second = num_tokens / batch_duration 
 
             # gather loss and t/s from all ranks if DDP
             batch_loss = mean(dist_gather(batch_loss)) if is_dist() else batch_loss  
-            tokens_per_second = sum(dist_gather(tokens_per_second)) if is_dist() else tokens_per_second  
-
+            tokens_per_second = sum(dist_gather(tokens_per_second)) if is_dist() else tokens_per_second
+            
             if train_cfg.eval_in_epochs and global_step % train_cfg.eval_interval == 0 and is_update_step:
                 model.eval()
                 if device == "cuda":
@@ -394,6 +413,9 @@ def train(train_cfg, vlm_cfg):
                     "data_load_time": data_load_time,
                     "fw_bw_time": fw_bw_time,
                     "post_process_time": post_process_time,
+                    "mean_images_per_batch": mean_images_per_batch,
+                    "min_images_per_batch": min_images_per_batch,
+                    "max_images_per_batch": max_images_per_batch,
                     **({"grad_norm": grad_norm} if train_cfg.max_grad_norm is not None and is_update_step else {})
                 }, step=global_step)
                 
