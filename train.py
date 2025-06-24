@@ -10,7 +10,7 @@ import torch.optim as optim
 from statistics import mean
 from dataclasses import asdict
 from datasets import load_dataset, concatenate_datasets
-from torch.utils.data import DataLoader, RandomSampler, DistributedSampler
+from torch.utils.data import DataLoader, DistributedSampler
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
@@ -18,8 +18,8 @@ torch.manual_seed(0)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(0)
 
-from data.collators import VQACollator, MMStarCollator
-from data.datasets import MMStarDataset, VQADataset
+from data.collators import VQACollator
+from data.datasets import VQADataset
 from data.advanced_datasets import ConstantLengthDataset
 from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
@@ -109,13 +109,9 @@ def get_dataloaders(train_cfg, vlm_cfg):
     train_dataset = ConstantLengthDataset(train_dataset, infinite=False, max_sample_length=train_cfg.max_sample_length, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*64, queue_size=train_cfg.batch_size*64*2,
                                           max_images_per_example=train_cfg.max_images_per_example, max_images_per_knapsack=train_cfg.max_images_per_knapsack)
     val_dataset = VQADataset(train_ds.select(range(train_size, total_samples)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
-    # val_dataset = ConstantLengthDataset(val_dataset, infinite=False, max_sample_length=train_cfg.max_sample_length, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4, queue_size=train_cfg.batch_size*4*2,
-    #                                      max_images_per_example=train_cfg.max_images_per_example, max_images_per_knapsack=train_cfg.max_images_per_knapsack)
-    test_dataset = MMStarDataset(test_ds['val'], tokenizer, image_processor, vlm_cfg.mp_image_token_length)
 
     # Create collators
     vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length)
-    mmstar_collator = MMStarCollator(tokenizer)
 
     g = torch.Generator()
     g.manual_seed(0)
@@ -152,39 +148,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
         generator=g,
     )
 
-    test_loader = DataLoader(
-        test_dataset, 
-        batch_size=train_cfg.mmstar_batch_size, 
-        shuffle=False, 
-        collate_fn=mmstar_collator,
-        pin_memory=True,
-        worker_init_fn=seed_worker,
-        generator=g,
-        )
-
-    return train_loader, val_loader, test_loader
-
-def test_mmstar(model, tokenizer, test_loader, device):
-    total_examples = 0
-    correct_predictions = 0
-    with torch.no_grad():
-        for batch in test_loader:
-            images = batch['images']
-            input_ids = batch['input_ids'].to(device)
-            labels = batch['labels'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-
-            correct_answer = tokenizer.batch_decode(labels, skip_special_tokens=True)
-            gen = model.generate(input_ids, images, attention_mask, greedy=True, max_new_tokens=10)
-            model_output = tokenizer.batch_decode(gen, skip_special_tokens=True)
-            
-            is_correct = utils.check_multiple_choice_with_regex(model_output, correct_answer)
-            
-            total_examples += len(is_correct)
-            if is_correct:
-                correct_predictions += sum(is_correct)
-    accuracy = correct_predictions / total_examples if total_examples > 0 else 0
-    return accuracy
+    return train_loader, val_loader
 
 # Cosine learning rate schedule with warmup (from Karpathy)
 # https://github.com/karpathy/build-nanogpt/blob/master/train_gpt2.py#L353
@@ -204,7 +168,7 @@ def get_lr(it, max_lr, max_steps):
     return min_lr + coeff * (max_lr - min_lr)
 
 def train(train_cfg, vlm_cfg):
-    train_loader, val_loader, test_loader = get_dataloaders(train_cfg, vlm_cfg)
+    train_loader, val_loader = get_dataloaders(train_cfg, vlm_cfg)
     tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens, vlm_cfg.lm_chat_template)
 
     run_name = get_run_name(train_cfg, vlm_cfg)
@@ -360,7 +324,6 @@ def train(train_cfg, vlm_cfg):
                 if device == "cuda":
                     torch.cuda.empty_cache()
                 with torch.no_grad():
-                    save = False
                     total_val_loss = 0
                     for batch in val_loader:
                         images = batch["images"]
@@ -376,9 +339,9 @@ def train(train_cfg, vlm_cfg):
                     avg_val_loss = mean(dist_gather(avg_val_loss)) if is_dist() else avg_val_loss
                     if avg_val_loss < best_val_loss:
                         best_val_loss = avg_val_loss
-                        save = True
-                    if train_cfg.log_wandb and is_master():
-                        run.log({"val_loss": avg_val_loss}, step=global_step)
+                        if is_master():
+                            save_model = model.module if is_dist() else model  # unwrap the model for saving if DDP
+                            save_model.save_pretrained(save_directory=os.path.join(vlm_cfg.vlm_checkpoint_path, run_name))
 
                     lmms_results = {}
                     if train_cfg.use_lmms_eval and global_step % (train_cfg.eval_interval*2) == 0:
@@ -396,21 +359,11 @@ def train(train_cfg, vlm_cfg):
                                 for metric_name, metric_value in task_results.items():
                                     if isinstance(metric_value, (int, float)):
                                         lmms_results[f"lmms_{task_name}_{metric_name.split(',')[0]}"] = metric_value
-                        
-                    if is_master() and global_step % (train_cfg.eval_interval*2) == 0:
-                        eval_model = model.module if is_dist() else model  # unwrap the model for eval if DDP
-                        epoch_accuracy = test_mmstar(eval_model, tokenizer, test_loader, device)
-                        if epoch_accuracy > best_accuracy:
-                            best_accuracy = epoch_accuracy
-                            save = True
-                        if save:
-                            eval_model.save_pretrained(save_directory=os.path.join(vlm_cfg.vlm_checkpoint_path, run_name))
-                        
-                        if train_cfg.log_wandb and is_master():    
-                            run.log({"accuracy": epoch_accuracy, **lmms_results}, step=global_step)
-                        print(f"Step: {global_step}, Val Loss: {avg_val_loss:.4f}, Tokens/s: {tokens_per_second:.2f}, Accuracy: {epoch_accuracy:.4f}")
-                    elif is_master() and not global_step % (train_cfg.eval_interval*4) == 0:
+                    
+                    if is_master():
                         print(f"Step: {global_step}, Val Loss: {avg_val_loss:.4f}, Tokens/s: {tokens_per_second:.2f}")
+                        if train_cfg.log_wandb:
+                            run.log({"val_loss": avg_val_loss, **{f"lmms_eval/{key}": value for key, value in lmms_results.items()}}, step=global_step)
 
                 model.train()
 
