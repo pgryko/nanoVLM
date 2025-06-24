@@ -358,7 +358,7 @@ def train(train_cfg, vlm_cfg):
                             for task_name, task_results in eval_results[0]["results"].items():
                                 for metric_name, metric_value in task_results.items():
                                     if isinstance(metric_value, (int, float)):
-                                        lmms_results[f"lmms_{task_name}_{metric_name.split(',')[0]}"] = metric_value
+                                        lmms_results[f"{task_name}_{metric_name.split(',')[0]}"] = metric_value
                     
                     if is_master():
                         print(f"Step: {global_step}, Val Loss: {avg_val_loss:.4f}, Tokens/s: {tokens_per_second:.2f}")
