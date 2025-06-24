@@ -106,7 +106,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
 
     train_dataset = VQADataset(train_ds.select(range(train_size)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
     
-    train_dataset = ConstantLengthDataset(train_dataset, infinite=False, max_sample_length=train_cfg.max_sample_length, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4, queue_size=train_cfg.batch_size*4*2,
+    train_dataset = ConstantLengthDataset(train_dataset, infinite=False, max_sample_length=train_cfg.max_sample_length, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*64, queue_size=train_cfg.batch_size*64*2,
                                           max_images_per_example=train_cfg.max_images_per_example, max_images_per_knapsack=train_cfg.max_images_per_knapsack)
     val_dataset = VQADataset(train_ds.select(range(train_size, total_samples)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
     # val_dataset = ConstantLengthDataset(val_dataset, infinite=False, max_sample_length=train_cfg.max_sample_length, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4, queue_size=train_cfg.batch_size*4*2,
@@ -267,6 +267,17 @@ def train(train_cfg, vlm_cfg):
     best_accuracy = 0
     best_val_loss = float('inf')
     global_step = 0
+    
+    # Training stats accumulators
+    stats_log_interval = 100
+    accumulated_stats = {
+        'tokens_per_second': [],
+        'data_load_time': [],
+        'fw_bw_time': [],
+        'post_process_time': [],
+        'images_per_sample': [],
+    }
+    
     for epoch in range(train_cfg.epochs):
         epoch_start_time = time.time()
         model.train()
@@ -330,22 +341,20 @@ def train(train_cfg, vlm_cfg):
             total_tokens_processed += num_tokens
             post_process_time = time.time() - post_process_start
 
-            images_per_batch = [len(image_pack) for image_pack in images]
-            num_images = sum(images_per_batch)
-            mean_images_per_batch = num_images / len(images_per_batch)
-            min_images_per_batch = min(images_per_batch)
-            max_images_per_batch = max(images_per_batch)
-            mean_images_per_batch = mean(dist_gather(mean_images_per_batch)) if is_dist() else mean_images_per_batch
-            min_images_per_batch = min(dist_gather(min_images_per_batch)) if is_dist() else min_images_per_batch
-            max_images_per_batch = max(dist_gather(max_images_per_batch)) if is_dist() else max_images_per_batch
+            images_per_sample = [len(image_pack) for image_pack in images]
+            num_images = sum(images_per_sample)
+            images_per_sample = num_images / len(images_per_sample)
 
             batch_end_time = time.time()
             batch_duration = batch_end_time - batch_start_time
-            tokens_per_second = num_tokens / batch_duration 
+            tokens_per_second = get_world_size() * num_tokens / batch_duration  # Multiply by world size to get global tokens/s
 
-            # gather loss and t/s from all ranks if DDP
-            batch_loss = mean(dist_gather(batch_loss)) if is_dist() else batch_loss  
-            tokens_per_second = sum(dist_gather(tokens_per_second)) if is_dist() else tokens_per_second
+            # Accumulate training stats
+            accumulated_stats['tokens_per_second'].append(tokens_per_second)
+            accumulated_stats['data_load_time'].append(data_load_time)
+            accumulated_stats['fw_bw_time'].append(fw_bw_time)
+            accumulated_stats['post_process_time'].append(post_process_time)
+            accumulated_stats['images_per_sample'].append(images_per_sample)
             
             if train_cfg.eval_in_epochs and global_step % train_cfg.eval_interval == 0 and is_update_step:
                 model.eval()
@@ -406,18 +415,57 @@ def train(train_cfg, vlm_cfg):
 
                 model.train()
 
-            if train_cfg.log_wandb and is_master():
-                run.log({
-                    "batch_loss": batch_loss,
-                    "tokens_per_second": tokens_per_second,
-                    "data_load_time": data_load_time,
-                    "fw_bw_time": fw_bw_time,
-                    "post_process_time": post_process_time,
-                    "mean_images_per_batch": mean_images_per_batch,
-                    "min_images_per_batch": min_images_per_batch,
-                    "max_images_per_batch": max_images_per_batch,
-                    **({"grad_norm": grad_norm} if train_cfg.max_grad_norm is not None and is_update_step else {})
-                }, step=global_step)
+            # Log training stats every N steps (ALL RANKS must participate in collective ops)
+            if global_step % stats_log_interval == 0 and len(accumulated_stats['tokens_per_second']) > 0 and is_update_step:
+                # ALL RANKS: Perform collective operations for training stats
+                stats = {}
+                for key in ['tokens_per_second', 'data_load_time', 'fw_bw_time', 'post_process_time', 'images_per_sample']:
+                    if is_dist():
+                        all_values = dist_gather(accumulated_stats[key])
+                        all_values_flat = [item for sublist in all_values for item in sublist]  # Flatten list of lists
+                        stats[f'avg_{key}'] = mean(all_values_flat)
+                    else:
+                        stats[f'avg_{key}'] = mean(accumulated_stats[key])
+                
+                for key in ['data_load_time', 'fw_bw_time', 'post_process_time', 'images_per_sample']:
+                    if is_dist():
+                        all_values = dist_gather(accumulated_stats[key])
+                        all_values_flat = [item for sublist in all_values for item in sublist]
+                        stats[f'max_{key}'] = max(all_values_flat)
+                    else:
+                        stats[f'max_{key}'] = max(accumulated_stats[key])
+
+                if is_dist():
+                    all_images_values = dist_gather(accumulated_stats['images_per_sample'])
+                    all_images_flat = [item for sublist in all_images_values for item in sublist]
+                    stats['min_images_per_sample'] = min(all_images_flat)
+                else:
+                    stats['min_images_per_sample'] = min(accumulated_stats['images_per_sample'])
+                
+                # MASTER ONLY: Log to wandb
+                if train_cfg.log_wandb and is_master():
+                    run.log({
+                        **{f"training_stats/{key}": value for key, value in stats.items()},
+                    }, step=global_step)
+                
+                # ALL RANKS: Reset accumulators
+                for key in accumulated_stats:
+                    accumulated_stats[key] = []
+
+            # Log batch loss  
+            if is_update_step:
+                # ALL RANKS: gather loss from all ranks if DDP
+                if is_dist():
+                    batch_loss_gathered = mean(dist_gather(batch_loss))
+                else:
+                    batch_loss_gathered = batch_loss
+                    
+                # MASTER ONLY: Log to wandb
+                if train_cfg.log_wandb and is_master():
+                    run.log({
+                        "batch_loss": batch_loss_gathered,
+                        **({"grad_norm": grad_norm} if train_cfg.max_grad_norm is not None else {})
+                    }, step=global_step)
                 
             if is_update_step:
                 global_step += 1

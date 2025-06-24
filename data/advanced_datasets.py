@@ -31,8 +31,8 @@ class ConstantLengthDataset(IterableDataset):
         self.max_images_per_knapsack = max_images_per_knapsack
         self._sentinel = object()
         self._average_length_per_sample = (
-            self.dataset.mp_image_token_length + 367
-        )  # 367 is the average tokens for the cauldron dataset
+            self.dataset.mp_image_token_length + 198
+        )  # 198 is the average tokens for the cauldron dataset
 
     def __len__(self):
         return int(
