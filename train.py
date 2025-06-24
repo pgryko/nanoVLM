@@ -344,7 +344,7 @@ def train(train_cfg, vlm_cfg):
                             save_model.save_pretrained(save_directory=os.path.join(vlm_cfg.vlm_checkpoint_path, run_name))
 
                     lmms_results = {}
-                    if train_cfg.use_lmms_eval and global_step % (train_cfg.eval_interval*2) == 0:
+                    if train_cfg.use_lmms_eval:
                         eval_results = evaluate(
                             model=model.module if is_dist() else model,
                             tasks=train_cfg.lmms_eval_tasks,
