@@ -290,8 +290,8 @@ def train(train_cfg, vlm_cfg):
                 if train_cfg.max_grad_norm is not None:
                     grad_norm = torch.nn.utils.clip_grad_norm_(all_params, max_norm=train_cfg.max_grad_norm)
 
-                adj_lr_mp = get_lr(global_step, train_cfg.lr_mp, train_cfg.max_training_steps // train_cfg.gradient_accumulation_steps)
-                adj_lr_backbones = get_lr(global_step, train_cfg.lr_backbones, train_cfg.max_training_steps // train_cfg.gradient_accumulation_steps)
+                adj_lr_mp = get_lr(global_step, train_cfg.lr_mp, train_cfg.max_training_steps)
+                adj_lr_backbones = get_lr(global_step, train_cfg.lr_backbones, train_cfg.max_training_steps)
                 optimizer.param_groups[0]['lr'] = adj_lr_mp
                 optimizer.param_groups[1]['lr'] = adj_lr_backbones
                 optimizer.step()
