@@ -55,8 +55,8 @@ class TrainConfig:
     mmstar_batch_size: int = 32
     max_grad_norm: float = 1.0
     eval_in_epochs: bool = True
-    eval_interval: int = 250
-    stats_log_interval: int = 100
+    eval_interval: int = 200 # Needs to be a multiple of the gradient_accumulation_steps
+    stats_log_interval: int = 100 # Needs to be a multiple of the gradient_accumulation_steps
     max_training_steps: int = 8000
     max_images_per_example: int = 4
     max_images_per_knapsack: int = 18
