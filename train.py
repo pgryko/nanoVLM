@@ -67,7 +67,7 @@ def wrap_model(model):
 def get_run_name(train_cfg, vlm_cfg):
     dataset_size = "full_ds" if train_cfg.data_cutoff_idx is None else f"{train_cfg.data_cutoff_idx}samples"
     batch_size = f"bs{int(train_cfg.batch_size*get_world_size()*train_cfg.gradient_accumulation_steps)}"
-    epochs = f"ep{train_cfg.epochs}"
+    max_training_steps = f"{train_cfg.max_training_steps}"
     learning_rate = f"lr{train_cfg.lr_backbones}-{train_cfg.lr_mp}"
     num_gpus = f"{get_world_size()}xGPU"
     date = time.strftime("%m%d-%H%M%S")
@@ -75,7 +75,7 @@ def get_run_name(train_cfg, vlm_cfg):
     mp = f"mp{vlm_cfg.mp_pixel_shuffle_factor}"
     llm = f"{vlm_cfg.lm_model_type.split('/')[-1]}"
 
-    return f"nanoVLM_{vit}_{mp}_{llm}_{num_gpus}_{dataset_size}_{batch_size}_{epochs}_{learning_rate}_{date}"
+    return f"nanoVLM_{vit}_{mp}_{llm}_{num_gpus}_{dataset_size}_{batch_size}_{max_training_steps}_{learning_rate}_{date}"
 
 def get_dataloaders(train_cfg, vlm_cfg):
     # Create datasets
@@ -106,7 +106,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
 
     train_dataset = VQADataset(train_ds.select(range(train_size)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
     
-    train_dataset = ConstantLengthDataset(train_dataset, infinite=False, max_sample_length=train_cfg.max_sample_length, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*128, queue_size=train_cfg.batch_size*128*2,
+    train_dataset = ConstantLengthDataset(train_dataset, infinite=False, max_sample_length=train_cfg.max_sample_length, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*64, queue_size=train_cfg.batch_size*64*2,
                                           max_images_per_example=train_cfg.max_images_per_example, max_images_per_knapsack=train_cfg.max_images_per_knapsack)
     val_dataset = VQADataset(train_ds.select(range(train_size, total_samples)), tokenizer, image_processor, vlm_cfg.mp_image_token_length)
     # val_dataset = ConstantLengthDataset(val_dataset, infinite=False, max_sample_length=train_cfg.max_sample_length, seq_length=vlm_cfg.lm_max_length, num_of_sequences=train_cfg.batch_size*4, queue_size=train_cfg.batch_size*4*2,
@@ -267,9 +267,9 @@ def train(train_cfg, vlm_cfg):
     best_accuracy = 0
     best_val_loss = float('inf')
     global_step = 0
+    epoch = 0
     
     # Training stats accumulators
-    stats_log_interval = 100
     accumulated_stats = {
         'tokens_per_second': [],
         'data_load_time': [],
@@ -278,7 +278,8 @@ def train(train_cfg, vlm_cfg):
         'images_per_sample': [],
     }
     
-    for epoch in range(train_cfg.epochs):
+    while global_step < train_cfg.max_training_steps:
+        epoch += 1
         epoch_start_time = time.time()
         model.train()
         total_train_loss = 0
@@ -325,8 +326,8 @@ def train(train_cfg, vlm_cfg):
                 if train_cfg.max_grad_norm is not None:
                     grad_norm = torch.nn.utils.clip_grad_norm_(all_params, max_norm=train_cfg.max_grad_norm)
 
-                adj_lr_mp = get_lr(global_step, train_cfg.lr_mp, len(train_loader) * train_cfg.epochs // train_cfg.gradient_accumulation_steps)
-                adj_lr_backbones = get_lr(global_step, train_cfg.lr_backbones, len(train_loader) * train_cfg.epochs // train_cfg.gradient_accumulation_steps)
+                adj_lr_mp = get_lr(global_step, train_cfg.lr_mp, train_cfg.max_training_steps // train_cfg.gradient_accumulation_steps)
+                adj_lr_backbones = get_lr(global_step, train_cfg.lr_backbones, train_cfg.max_training_steps // train_cfg.gradient_accumulation_steps)
                 optimizer.param_groups[0]['lr'] = adj_lr_mp
                 optimizer.param_groups[1]['lr'] = adj_lr_backbones
                 optimizer.step()
@@ -342,8 +343,6 @@ def train(train_cfg, vlm_cfg):
             post_process_time = time.time() - post_process_start
 
             images_per_sample = [len(image_pack) for image_pack in images]
-            num_images = sum(images_per_sample)
-            images_per_sample = num_images / len(images_per_sample)
 
             batch_end_time = time.time()
             batch_duration = batch_end_time - batch_start_time
@@ -354,7 +353,7 @@ def train(train_cfg, vlm_cfg):
             accumulated_stats['data_load_time'].append(data_load_time)
             accumulated_stats['fw_bw_time'].append(fw_bw_time)
             accumulated_stats['post_process_time'].append(post_process_time)
-            accumulated_stats['images_per_sample'].append(images_per_sample)
+            accumulated_stats['images_per_sample'].extend(images_per_sample)
             
             if train_cfg.eval_in_epochs and global_step % train_cfg.eval_interval == 0 and is_update_step:
                 model.eval()
@@ -416,7 +415,7 @@ def train(train_cfg, vlm_cfg):
                 model.train()
 
             # Log training stats every N steps (ALL RANKS must participate in collective ops)
-            if global_step % stats_log_interval == 0 and len(accumulated_stats['tokens_per_second']) > 0 and is_update_step:
+            if global_step % train_cfg.stats_log_interval == 0 and len(accumulated_stats['tokens_per_second']) > 0 and is_update_step:
                 # ALL RANKS: Perform collective operations for training stats
                 stats = {}
                 for key in ['tokens_per_second', 'data_load_time', 'fw_bw_time', 'post_process_time', 'images_per_sample']:
@@ -469,6 +468,8 @@ def train(train_cfg, vlm_cfg):
                 
             if is_update_step:
                 global_step += 1
+                if global_step >= train_cfg.max_training_steps:
+                    break
             data_load_start = time.time()
 
         avg_train_loss = total_train_loss / len(train_loader)
@@ -489,13 +490,14 @@ def train(train_cfg, vlm_cfg):
                          "epoch_duration": epoch_duration,
                          "epoch_tokens_per_second": epoch_tokens_per_second})
 
-            print(f"Epoch {epoch+1}/{train_cfg.epochs}, Train Loss: {avg_train_loss:.4f} | Time: {epoch_duration:.2f}s | T/s: {epoch_tokens_per_second:.2f}")
+            print(f"Epoch: {epoch}, Step: {global_step}/{train_cfg.max_training_steps}, Train Loss: {avg_train_loss:.4f} | Time: {epoch_duration:.2f}s | T/s: {epoch_tokens_per_second:.2f}")
 
     # Summary Statistics
     if is_master():
         avg_epoch_time = sum(epoch_times) / len(epoch_times)
         total_training_time = sum(epoch_times)
-        total_samples_processed = len(train_loader.dataset) * train_cfg.epochs
+        batch_size = int(train_cfg.batch_size*get_world_size()*train_cfg.gradient_accumulation_steps)
+        total_samples_processed = batch_size * global_step
         avg_time_per_sample = total_training_time / total_samples_processed
         print(f"Average time per epoch: {avg_epoch_time:.2f}s")
         print(f"Average time per sample: {avg_time_per_sample:.4f}s")

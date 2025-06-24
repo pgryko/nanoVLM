@@ -56,7 +56,8 @@ class TrainConfig:
     max_grad_norm: float = 1.0
     eval_in_epochs: bool = True
     eval_interval: int = 250
-    epochs: int = 10
+    stats_log_interval: int = 100
+    max_training_steps: int = 8000
     max_images_per_example: int = 4
     max_images_per_knapsack: int = 18
     max_sample_length: int = 1024
