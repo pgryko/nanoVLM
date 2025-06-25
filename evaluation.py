@@ -273,114 +273,23 @@ def parse_eval_args() -> argparse.Namespace:
     parser.add_argument("--process_with_media", action="store_true", help="Whether you will process you dataset with audio, image. By default set to False" "In case some benchmarks need to be processed with media, set this flag to True.")
     args = parser.parse_args()
     return args
+    
+def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
+    default_args = parse_eval_args()
 
+    if args is None and len(sys.argv) == 1:
+        print("┌───────────────────────────────────────────────────────────────────────────────┐")
+        print("│ Please provide arguments to evaluate the model. e.g.                          │")
+        print("│ `python evaluation.py  --model lusxvr/nanoVLM-450M --tasks mmstar`            │")
+        print("└───────────────────────────────────────────────────────────────────────────────┘")
+        sys.exit(1)
 
-def evaluate(
-    config: str = "",
-    model: str = "hf",
-    tasks: str = None,
-    model_args: str = "",
-    num_fewshot: int = None,
-    batch_size: str = "128",
-    max_batch_size: int = None,
-    device: str = "cuda",
-    output_path: str = "results/",
-    limit: float = None,
-    use_cache: str = None,
-    cache_requests: str = None,
-    check_integrity: bool = False,
-    write_out: bool = False,
-    log_samples: bool = False,
-    wandb_log_samples: bool = False,
-    log_samples_suffix: str = "model_outputs",
-    system_instruction: str = None,
-    apply_chat_template: bool = False,
-    fewshot_as_multiturn: bool = False,
-    show_config: bool = False,
-    include_path: str = None,
-    gen_kwargs: str = "",
-    verbosity: str = "INFO",
-    wandb_args: str = "",
-    timezone: str = "Asia/Singapore",
-    hf_hub_log_args: str = "",
-    predict_only: bool = False,
-    seed: Union[str, list] = "0,1234,1234,1234",
-    trust_remote_code: bool = False,
-    process_with_media: bool = False,
-):
-    """
-    A function to run lmms-eval evaluation.
-
-    :param model:
-        Name of model e.g. `hf`
-    :param model_args:
-        String arguments for model, e.g. `pretrained=EleutherAI/pythia-160m,dtype=float32`
-    :param tasks:
-        To get full list of tasks, use the command lmms-eval --tasks list
-    :param num_fewshot:
-        Number of examples in few-shot context
-    :param batch_size:
-        Batch size. Acceptable values are 'auto', 'auto:N' or N, where N is an integer.
-    :param max_batch_size:
-        Maximal batch size to try with --batch_size auto
-    :param device:
-        Device to use (e.g. cuda, cuda:0, cpu)
-    :param output_path:
-        The path to the output file where the result metrics will be saved.
-    :param limit:
-        Limit the number of examples per task. If <1, limit is a percentage of the total number of examples.
-    :param use_cache:
-        A path to a sqlite db file for caching model responses. `None` if not caching.
-    :param cache_requests:
-        Speed up evaluation by caching the building of dataset requests. `None` if not caching.
-    :param check_integrity:
-        Whether to run the relevant part of the test suite for the tasks
-    :param write_out:
-        Prints the prompt for the first few documents.
-    :param log_samples:
-        If True, write out all model outputs and documents for per-sample measurement and post-hoc analysis
-    :param wandb_log_samples:
-        If True, write out all model outputs and documents for per-sample measurement and post-hoc analysis to Weights and Biases
-    :param log_samples_suffix:
-        Specify a suffix for the log_samples file name.
-    :param system_instruction:
-        System instruction to be used in the prompt
-    :param apply_chat_template:
-        If True, applies the chat template to the prompt
-    :param fewshot_as_multiturn:
-        If True, uses the fewshot as a multi-turn conversation
-    :param show_config:
-        If True, shows the the full config of all tasks at the end of the evaluation.
-    :param include_path:
-        Additional path to include if there are external tasks to include.
-    :param gen_kwargs:
-        String arguments for model generation on greedy_until tasks, e.g. `temperature=0,top_k=0,top_p=0`
-    :param verbosity:
-        Log error when tasks are not registered.
-    :param wandb_args:
-        Comma separated string arguments passed to wandb.init, e.g. `project=lmms-eval,job_type=eval`
-    :param timezone:
-        Timezone for datetime string, e.g. Asia/Singapore, America/New_York.
-    :param hf_hub_log_args:
-        Comma separated string arguments passed to Hugging Face Hub's log function.
-    :param predict_only:
-        Use with `log_samples`. Only model outputs will be saved and metrics will not be evaluated.
-    :param seed:
-        Set seed for python's random, numpy, torch, and fewshot sampling.
-    :param trust_remote_code:
-        Sets trust_remote_code to True to execute code to create HF Datasets from the Hub.
-    :param process_with_media:
-        Whether you will process you dataset with audio, image.
-    :return:
-        A list of results for each evaluation run.
-    """
-    args_dict = locals()
-
-    if isinstance(args_dict["seed"], str):
-        default_seed_string = "0,1234,1234,1234"
-        args_dict["seed"] = _int_or_none_list_arg_type(3, 4, default_seed_string, args_dict["seed"])
-
-    args = argparse.Namespace(**args_dict)
+    # If args were provided, override the defaults
+    if args:
+        for key, value in vars(args).items():
+            setattr(default_args, key, value)
+    
+    args = default_args
 
     if args.wandb_args:
         if "name" not in args.wandb_args:
@@ -426,35 +335,36 @@ def evaluate(
         else:
             is_main_process = False
 
-    for item_args in args_list:
+    for args in args_list:
         try:
-            results, samples = cli_evaluate_single(item_args)
+            results, samples = cli_evaluate_single(args)
             results_list.append(results)
 
             if accelerator:
                 accelerator.wait_for_everyone()
             elif torch.distributed.is_available() and torch.distributed.is_initialized():
                 torch.distributed.barrier()
-            if is_main_process and item_args.wandb_args:
+            if is_main_process and args.wandb_args:
                 try:
                     wandb_logger.post_init(results)
                     wandb_logger.log_eval_result()
-                    if item_args.wandb_log_samples and samples is not None:
+                    if args.wandb_log_samples and samples is not None:
                         wandb_logger.log_eval_samples(samples)
                 except Exception as e:
                     eval_logger.info(f"Logging to Weights and Biases failed due to {e}")
 
         except Exception as e:
-            if item_args.verbosity == "DEBUG":
+            if args.verbosity == "DEBUG":
                 raise e
             else:
                 traceback.print_exc()
                 eval_logger.error(f"Error during evaluation: {e}. Please set `--verbosity=DEBUG` to get more information.")
                 results_list.append(None)
 
-    for item_args, results in zip(args_list, results_list):
+    for args, results in zip(args_list, results_list):
+        # cli_evaluate will return none if the process is not the main process (rank 0)
         if results is not None:
-            print(f"{item_args.model} ({item_args.model_args}), gen_kwargs: ({item_args.gen_kwargs}), limit: {item_args.limit}, num_fewshot: {item_args.num_fewshot}, " f"batch_size: {item_args.batch_size}")
+            print(f"{args.model} ({args.model_args}), gen_kwargs: ({args.gen_kwargs}), limit: {args.limit}, num_fewshot: {args.num_fewshot}, " f"batch_size: {args.batch_size}")
             print(make_table(results))
             if "groups" in results:
                 print(make_table(results, "groups"))
@@ -463,22 +373,6 @@ def evaluate(
         wandb_logger.run.finish()
 
     return results_list
-
-
-def cli_evaluate(args: Union[argparse.Namespace, None] = None) -> None:
-    if not args:
-        args = parse_eval_args()
-
-    # Check if no arguments were passed after parsing
-    if len(sys.argv) == 1:
-        print("┌───────────────────────────────────────────────────────────────────────────────┐")
-        print("│ Please provide arguments to evaluate the model. e.g.                          │")
-        print("│ `python evaluation.py  --model lusxvr/nanoVLM-450M --tasks mmstar`            │")
-        print("└───────────────────────────────────────────────────────────────────────────────┘")
-        sys.exit(1)
-
-    evaluate(**vars(args))
-
 
 def cli_evaluate_single(args: Union[argparse.Namespace, None] = None) -> None:
     selected_task_list = args.tasks.split(",") if args.tasks else None
@@ -590,7 +484,7 @@ def cli_evaluate_single(args: Union[argparse.Namespace, None] = None) -> None:
     wrapped_model = NanoVLMWrapper(
         model=args.model,
         device=args.device,
-        batch_size=args.batch_size,
+        batch_size=int(args.batch_size),
     )
 
     results = evaluator.simple_evaluate(

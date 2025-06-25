@@ -123,12 +123,13 @@ python evaluation.py --model lusxvr/nanoVLM-450M --tasks mmstar,mme
 # If you want to use it during training, simply import the module and call it just as you would from the command line.
 # You can pass all the arguments you can also pass in the command line.
 # The evaluation during training works in the full DDP setup.
-from evaluation import evaluate
-results = evaluate(
+from evaluation import cli_evaluate
+args = argparse.Namespace(
     model='lusxvr/nanoVLM-450M', # This can be either a checkpoint path or the model itself
     tasks='mmstar,mmmu,ocrbench',
     batch_size=128 # Adapt this to your GPU, needs to be passed to avoid an OOM Error
 )
+results = cli_evaluate(args)
 ```
 
 ## Hub integration

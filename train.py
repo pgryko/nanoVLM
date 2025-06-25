@@ -25,7 +25,7 @@ from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
 import models.config as config
 import models.utils as utils
-from evaluation import evaluate
+from evaluation import cli_evaluate
 from data.data_utils import synchronized_dataloader_step
 
 #Otherwise, the tokenizer will throw a warning
@@ -345,7 +345,7 @@ def train(train_cfg, vlm_cfg):
 
                     lmms_results = {}
                     if train_cfg.use_lmms_eval:
-                        eval_results = evaluate(
+                        eval_args = argparse.Namespace(
                             model=model.module if is_dist() else model,
                             tasks=train_cfg.lmms_eval_tasks,
                             limit=train_cfg.lmms_eval_limit,
@@ -353,6 +353,8 @@ def train(train_cfg, vlm_cfg):
                             process_with_media=True,
                             device=device,
                         )
+                        # Evaluate using the CLI wrapper
+                        eval_results = cli_evaluate(eval_args)
 
                         if is_master() and eval_results and "results" in eval_results[0]:
                             for task_name, task_results in eval_results[0]["results"].items():
