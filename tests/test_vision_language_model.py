@@ -2,7 +2,6 @@ import torch
 import unittest
 from models.vision_language_model import VisionLanguageModel
 from models.config import VLMConfig # Assuming VLMConfig is in models.config
-from types import SimpleNamespace
 
 class TestVisionLanguageModel(unittest.TestCase):
     def setUp(self):

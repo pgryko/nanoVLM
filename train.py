@@ -24,7 +24,6 @@ from data.advanced_datasets import ConstantLengthDataset
 from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
 import models.config as config
-import models.utils as utils
 from data.data_utils import synchronized_dataloader_step
 
 #Otherwise, the tokenizer will throw a warning
