@@ -4,7 +4,7 @@ This allows using lmms-eval for intermediate evaluation during training.
 """
 
 import torch
-from typing import List, Tuple, Optional, Union
+from typing import List, Tuple, Optional
 from PIL import Image
 import numpy as np
 import torch.distributed as dist
@@ -17,7 +17,6 @@ from lmms_eval.api.instance import Instance
 
 from models.vision_language_model import VisionLanguageModel
 from data.processors import get_tokenizer, get_image_processor
-from data.collators import VQACollator
 
 
 class NanoVLMWrapper(lmms):
