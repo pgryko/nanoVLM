@@ -2,59 +2,67 @@
 
 This guide covers popular public datasets you can use to fine-tune NanoVLM, with conversion scripts and training examples.
 
-## Quick Start
+## ⚡ **Quick Start (Updated for Reliability)**
 
-1. **Choose a dataset** from the options below
-2. **Convert to NanoVLM format** using provided scripts
-3. **Train** using the custom training script
+1. **Activate your virtual environment**: `source .venv/bin/activate`
+2. **Use the reliable script**: `examples/simple_public_datasets.py`
+3. **Choose mixed dataset** for best results
+4. **Train** using the custom training script
 
-## Available Datasets
+```bash
+# Quick example
+source .venv/bin/activate
+python examples/simple_public_datasets.py --dataset mixed --output dataset.json --limit 8000
+python train_custom.py --custom_dataset_path dataset.json --batch_size 8 --max_training_steps 2000
+```
 
-### 1. LLaVA-Instruct (Recommended for General Use)
+## Available Datasets (Reliability Tested)
 
-**Description**: High-quality instruction-following conversations with images
-- **Size**: 150K samples (150k subset) or 665K (full)
-- **Type**: Instruction following, conversation
-- **Quality**: High (human-curated)
+### 🏆 **1. Mixed Dataset (RECOMMENDED - Most Reliable)**
+
+**Description**: Combines COCO captions + VQAv2 for best training diversity
+- **Size**: Customizable (typically 5K-20K samples)
+- **Type**: Image descriptions + Question answering
+- **Quality**: High (verified datasets)
+- **Reliability**: ⭐⭐⭐⭐⭐
 - **Use case**: General vision-language understanding
 
 ```bash
-# Convert LLaVA-Instruct-150K
-python examples/public_datasets.py \
-  --dataset llava \
-  --output datasets/llava_150k.json \
-  --subset 150k \
-  --limit 10000  # Optional: limit for testing
+# Convert Mixed Dataset (RECOMMENDED)
+python examples/simple_public_datasets.py \
+  --dataset mixed \
+  --output datasets/mixed_train.json \
+  --limit 8000
 
-# Train on LLaVA
+# Train on Mixed Dataset
 python train_custom.py \
-  --custom_dataset_path datasets/llava_150k.json \
+  --custom_dataset_path datasets/mixed_train.json \
   --batch_size 8 \
-  --max_training_steps 5000 \
+  --max_training_steps 3000 \
   --log_wandb
 ```
 
-### 2. COCO Captions (Good for Image Description)
+### 2. COCO Captions (Most Reliable for Beginners)
 
-**Description**: Natural image descriptions
-- **Size**: 118K training images, 5K validation
+**Description**: Natural image descriptions from Microsoft COCO
+- **Size**: 118K training samples
 - **Type**: Image captioning
 - **Quality**: High (human-annotated)
+- **Reliability**: ⭐⭐⭐⭐⭐
 - **Use case**: Learning to describe images
 
 ```bash
 # Convert COCO Captions
-python examples/public_datasets.py \
+python examples/simple_public_datasets.py \
   --dataset coco \
-  --output datasets/coco_captions.json \
-  --split train \
-  --limit 20000
+  --output datasets/coco_train.json \
+  --limit 5000
 
 # Train on COCO
 python train_custom.py \
-  --custom_dataset_path datasets/coco_captions.json \
-  --batch_size 16 \
-  --max_training_steps 3000
+  --custom_dataset_path datasets/coco_train.json \
+  --batch_size 8 \
+  --max_training_steps 2000
 ```
 
 ### 3. VQAv2 (Best for Question Answering)
@@ -63,21 +71,52 @@ python train_custom.py \
 - **Size**: 200K+ training samples
 - **Type**: Question answering
 - **Quality**: High (balanced answers)
+- **Reliability**: ⭐⭐⭐⭐⭐
 - **Use case**: Answering questions about images
 
 ```bash
 # Convert VQAv2
-python examples/public_datasets.py \
+python examples/simple_public_datasets.py \
   --dataset vqav2 \
-  --output datasets/vqav2.json \
-  --limit 50000
+  --output datasets/vqav2_train.json \
+  --limit 6000
 
 # Train on VQAv2
 python train_custom.py \
-  --custom_dataset_path datasets/vqav2.json \
-  --batch_size 12 \
-  --max_training_steps 4000
+  --custom_dataset_path datasets/vqav2_train.json \
+  --batch_size 8 \
+  --max_training_steps 3000
 ```
+
+### 4. Instruction-Following (VQA-Based)
+
+**Description**: Converted VQA dataset into instruction-following format
+- **Size**: Customizable
+- **Type**: Instruction following
+- **Quality**: High (converted from reliable VQA)
+- **Reliability**: ⭐⭐⭐⭐
+- **Use case**: Instruction following and general conversations
+
+```bash
+# Convert to Instruction Format
+python examples/simple_public_datasets.py \
+  --dataset llava \
+  --output datasets/instruction_train.json \
+  --limit 5000
+
+# Train on Instructions
+python train_custom.py \
+  --custom_dataset_path datasets/instruction_train.json \
+  --batch_size 8 \
+  --max_training_steps 2500
+```
+
+### ⚠️ Datasets with Issues
+
+#### ~~LLaVA-Instruct~~ (Has Loading Problems)
+- **Status**: Currently unreliable due to dataset formatting issues
+- **Alternative**: Use the instruction-following format above instead
+- **Issue**: PyArrow parsing errors during loading
 
 ### 4. VizWiz (Accessibility-Focused)
 
