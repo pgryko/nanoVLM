@@ -12,23 +12,38 @@ from data.processors import get_tokenizer, get_image_processor
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Generate text from an image with nanoVLM")
-    parser.add_argument(
-        "--checkpoint", type=str, default=None,
-        help="Path to a local checkpoint (directory or safetensors/pth). If omitted, we pull from HF."
+        description="Generate text from an image with nanoVLM"
     )
     parser.add_argument(
-        "--hf_model", type=str, default="lusxvr/nanoVLM-450M",
-        help="HuggingFace repo ID to download from incase --checkpoint isnt set."
+        "--checkpoint",
+        type=str,
+        default=None,
+        help="Path to a local checkpoint (directory or safetensors/pth). If omitted, we pull from HF.",
     )
-    parser.add_argument("--image", type=str, default="assets/image.png",
-                        help="Path to input image")
-    parser.add_argument("--prompt", type=str, default="What is this?",
-                        help="Text prompt to feed the model")
-    parser.add_argument("--generations", type=int, default=5,
-                        help="Num. of outputs to generate")
-    parser.add_argument("--max_new_tokens", type=int, default=20,
-                        help="Maximum number of tokens per output")
+    parser.add_argument(
+        "--hf_model",
+        type=str,
+        default="lusxvr/nanoVLM-450M",
+        help="HuggingFace repo ID to download from incase --checkpoint isnt set.",
+    )
+    parser.add_argument(
+        "--image", type=str, default="assets/image.png", help="Path to input image"
+    )
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        default="What is this?",
+        help="Text prompt to feed the model",
+    )
+    parser.add_argument(
+        "--generations", type=int, default=5, help="Num. of outputs to generate"
+    )
+    parser.add_argument(
+        "--max_new_tokens",
+        type=int,
+        default=20,
+        help="Maximum number of tokens per output",
+    )
     return parser.parse_args()
 
 
@@ -51,8 +66,16 @@ def main():
     tokenizer = get_tokenizer(model.cfg.lm_tokenizer, model.cfg.vlm_extra_tokens)
     image_processor = get_image_processor(model.cfg.vit_img_size)
 
-    messages = [{"role": "user", "content": tokenizer.image_token * model.cfg.mp_image_token_length + args.prompt}]
-    encoded_prompt = tokenizer.apply_chat_template([messages], tokenize=True, add_generation_prompt=True)
+    messages = [
+        {
+            "role": "user",
+            "content": tokenizer.image_token * model.cfg.mp_image_token_length
+            + args.prompt,
+        }
+    ]
+    encoded_prompt = tokenizer.apply_chat_template(
+        [messages], tokenize=True, add_generation_prompt=True
+    )
     tokens = torch.tensor(encoded_prompt).to(device)
 
     img = Image.open(args.image).convert("RGB")
