@@ -1,52 +1,30 @@
-FROM mcr.microsoft.com/azureml/pytorch-2.0-ubuntu20.04-py38-cuda11.7-gpu:latest
+FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
 
-# Install Python 3.12
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    software-properties-common \
-    && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y \
-    python3.12 \
-    python3.12-dev \
-    python3.12-venv \
-    python3.12-distutils \
     git \
-    wget \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Python 3.12 as default
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 \
-    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
-
-# Install pip for Python 3.12
-RUN wget https://bootstrap.pypa.io/get-pip.py \
-    && python3.12 get-pip.py \
-    && rm get-pip.py
-
 # Upgrade pip
-RUN python -m pip install --upgrade pip
-
-# Install PyTorch with CUDA support
-RUN pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu118
+RUN pip install --upgrade pip
 
 # Install nanoVLM dependencies
 RUN pip install \
-    transformers>=4.53.0 \
-    datasets>=3.6.0 \
-    huggingface-hub>=0.33.2 \
-    numpy>=2.3.1 \
-    pillow>=11.3.0 \
-    wandb>=0.21.0 \
-    accelerate>=1.3.0 \
-    sentencepiece>=0.2.0 \
-    protobuf>=5.30.0 \
-    scipy>=1.15.1 \
+    torch==2.1.0 \
+    torchvision==0.16.0 \
+    transformers==4.40.0 \
+    datasets==2.19.0 \
+    huggingface-hub==0.22.2 \
+    numpy==1.24.3 \
+    pillow==10.3.0 \
+    wandb==0.17.0 \
+    accelerate==0.30.0 \
+    sentencepiece==0.2.0 \
+    protobuf==4.25.3 \
+    scipy==1.13.0 \
     tqdm \
-    azure-ai-ml \
-    azure-identity
-
-# Install additional tools for evaluation
-RUN pip install lmms-eval
+    safetensors
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
