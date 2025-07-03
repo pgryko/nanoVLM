@@ -54,7 +54,7 @@ def submit_serverless_job(args):
     job = command(
         code="../",  # Upload entire nanoVLM directory
         command=command_str,
-        environment="nanovlm-env:1.0",
+        environment="nanovlm-env:2.0",
         experiment_name="nanovlm-serverless",
         display_name=f"nanovlm-{args.dataset}-serverless",
         # Use serverless compute by specifying instance type
