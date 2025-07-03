@@ -4,18 +4,21 @@ This guide provides the fastest way to start fine-tuning NanoVLM on high-quality
 
 ## 🚀 Quick Start Commands
 
-### Option 1: LLaVA-Instruct (Recommended for Beginners)
+### ⚡ **RECOMMENDED: Mixed Dataset (Most Reliable)**
 
 ```bash
-# 1. Convert dataset (10K samples for testing)
-python examples/public_datasets.py \
-  --dataset llava \
-  --output llava_150k.json \
-  --limit 10000
+# 1. Make sure you're in your virtual environment
+source .venv/bin/activate
 
-# 2. Train on M1 Mac
+# 2. Convert dataset (combines COCO + VQAv2 - most reliable!)
+python examples/simple_public_datasets.py \
+  --dataset mixed \
+  --output datasets/mixed_train.json \
+  --limit 8000
+
+# 3. Train on M1 Mac
 python train_custom.py \
-  --custom_dataset_path llava_150k.json \
+  --custom_dataset_path datasets/mixed_train.json \
   --batch_size 4 \
   --gradient_accumulation_steps 8 \
   --max_training_steps 2000 \
@@ -23,9 +26,9 @@ python train_custom.py \
   --log_wandb \
   --wandb_entity your_username
 
-# 3. Train on NVIDIA GPU
+# 4. Train on NVIDIA GPU
 python train_custom.py \
-  --custom_dataset_path llava_150k.json \
+  --custom_dataset_path datasets/mixed_train.json \
   --batch_size 16 \
   --gradient_accumulation_steps 2 \
   --max_training_steps 2000 \
@@ -35,93 +38,97 @@ python train_custom.py \
   --wandb_entity your_username
 ```
 
-### Option 2: COCO Captions (Image Description)
+### Option 1: COCO Captions (Most Reliable for Beginners)
 
 ```bash
-# 1. Convert dataset
-python examples/public_datasets.py \
+# 1. Convert dataset (reliable image descriptions)
+python examples/simple_public_datasets.py \
   --dataset coco \
-  --output coco_captions.json \
-  --limit 20000
+  --output datasets/coco_train.json \
+  --limit 5000
 
 # 2. Train
 python train_custom.py \
-  --custom_dataset_path coco_captions.json \
+  --custom_dataset_path datasets/coco_train.json \
+  --batch_size 8 \
+  --max_training_steps 2000 \
+  --log_wandb
+```
+
+### Option 2: VQAv2 Only (Question Answering)
+
+```bash
+# 1. Convert dataset
+python examples/simple_public_datasets.py \
+  --dataset vqav2 \
+  --output datasets/vqav2_train.json \
+  --limit 6000
+
+# 2. Train
+python train_custom.py \
+  --custom_dataset_path datasets/vqav2_train.json \
   --batch_size 8 \
   --max_training_steps 3000 \
   --log_wandb
 ```
 
-### Option 3: VQAv2 (Question Answering)
+### Option 3: Advanced (LLaVA-style) - If You Want Instructions
 
 ```bash
-# 1. Convert dataset
-python examples/public_datasets.py \
-  --dataset vqav2 \
-  --output vqav2.json \
-  --limit 15000
+# 1. Convert to instruction format (uses VQA as base)
+python examples/simple_public_datasets.py \
+  --dataset llava \
+  --output datasets/instruct_train.json \
+  --limit 5000
 
 # 2. Train
 python train_custom.py \
-  --custom_dataset_path vqav2.json \
+  --custom_dataset_path datasets/instruct_train.json \
   --batch_size 8 \
-  --max_training_steps 4000 \
+  --max_training_steps 3000 \
   --log_wandb
 ```
 
-### Option 4: Multi-Task Training (Best Performance)
+## ⚠️ **Important Notes**
 
+### Use the Reliable Script
+Always use `examples/simple_public_datasets.py` instead of `examples/public_datasets.py` - it's more reliable and handles image saving automatically.
+
+### Virtual Environment
+Make sure you're in your virtual environment:
 ```bash
-# 1. Convert multiple datasets
-python examples/public_datasets.py --dataset llava --output llava.json --limit 8000
-python examples/public_datasets.py --dataset coco --output coco.json --limit 8000  
-python examples/public_datasets.py --dataset vqav2 --output vqav2.json --limit 8000
-
-# 2. Combine datasets
-python -c "
-import json
-combined = []
-for filename in ['llava.json', 'coco.json', 'vqav2.json']:
-    with open(filename) as f:
-        combined.extend(json.load(f))
-with open('combined_dataset.json', 'w') as f:
-    json.dump(combined, f, indent=2)
-print(f'Combined dataset: {len(combined)} samples')
-"
-
-# 3. Train on combined dataset
-python train_custom.py \
-  --custom_dataset_path combined_dataset.json \
-  --batch_size 8 \
-  --max_training_steps 5000 \
-  --eval_interval 200 \
-  --log_wandb \
-  --wandb_entity your_username
+source .venv/bin/activate  # Linux/Mac
+# or
+.venv\Scripts\activate     # Windows
 ```
 
-## 📊 Dataset Overview
+## 📊 Dataset Overview (Updated with Reliable Options)
 
-| Dataset | Samples | Type | Best For | Training Time (M1) | Training Time (GPU) |
-|---------|---------|------|----------|-------------------|-------------------|
-| **LLaVA-Instruct** | 150K | Instruction following | General purpose | 3-4 hours (10K) | 1 hour (10K) |
-| **COCO Captions** | 118K | Image description | Captioning tasks | 4-6 hours (20K) | 1-2 hours (20K) |
-| **VQAv2** | 200K+ | Question answering | Factual QA | 3-5 hours (15K) | 1-1.5 hours (15K) |
-| **VizWiz** | 20K | Accessibility VQA | Real-world apps | 2-3 hours (full) | 45 min (full) |
-| **ScienceQA** | 12K | Educational QA | STEM applications | 2-3 hours (full) | 30-45 min (full) |
+| Dataset | Samples | Type | Reliability | Best For | Training Time (M1) | Training Time (GPU) |
+|---------|---------|------|-------------|----------|-------------------|-------------------|
+| **Mixed (COCO+VQA)** | Combined | Captions + QA | ⭐⭐⭐⭐⭐ | **General purpose (RECOMMENDED)** | 2-3 hours (8K) | 45-60 min (8K) |
+| **COCO Captions** | 118K | Image description | ⭐⭐⭐⭐⭐ | Learning to describe images | 1-2 hours (5K) | 30-45 min (5K) |
+| **VQAv2** | 200K+ | Question answering | ⭐⭐⭐⭐⭐ | Factual QA | 2-3 hours (6K) | 45-60 min (6K) |
+| **Instruction (VQA-based)** | Converted | Instruction following | ⭐⭐⭐⭐ | Instruction following | 2-3 hours (5K) | 45-60 min (5K) |
+| ~~LLaVA-Instruct~~ | ~~150K~~ | ~~Instructions~~ | ⭐⭐ | ~~Has loading issues~~ | ~~N/A~~ | ~~N/A~~ |
 
 ## 🎯 Recommended Workflows
 
-### For Beginners
+### For Beginners (Start Here!)
 ```bash
-# Start with small LLaVA subset
-python examples/public_datasets.py --dataset llava --output test.json --limit 1000
+# Activate environment
+source .venv/bin/activate
+
+# Start with reliable COCO dataset
+python examples/simple_public_datasets.py --dataset coco --output test.json --limit 1000
 python train_custom.py --custom_dataset_path test.json --batch_size 4 --max_training_steps 200
 ```
 
-### For Production Use
+### For Production Use (Recommended)
 ```bash
-# Use larger, combined dataset
-# ... multi-task training commands above ...
+# Use mixed dataset for best results
+python examples/simple_public_datasets.py --dataset mixed --output production.json --limit 10000
+python train_custom.py --custom_dataset_path production.json --batch_size 8 --max_training_steps 3000
 ```
 
 ### With W&B Monitoring and HF Upload
@@ -130,11 +137,17 @@ python train_custom.py --custom_dataset_path test.json --batch_size 4 --max_trai
 export WANDB_API_KEY="your_wandb_key"
 export HF_TOKEN="your_hf_token"
 
+# Create mixed dataset
+python examples/simple_public_datasets.py \
+  --dataset mixed \
+  --output datasets/full_training.json \
+  --limit 8000
+
 # Train with full monitoring
 python train_custom.py \
-  --custom_dataset_path combined_dataset.json \
+  --custom_dataset_path datasets/full_training.json \
   --batch_size 8 \
-  --max_training_steps 5000 \
+  --max_training_steps 3000 \
   --log_wandb \
   --wandb_entity your_username
 
@@ -203,26 +216,27 @@ torchrun --nproc_per_node=4 train_custom.py \
 # The conversion script will show URLs that need downloading
 ```
 
-## 🎉 Complete Example: 0 to Trained Model
+## 🎉 Complete Example: 0 to Trained Model (Updated)
 
 ```bash
 #!/bin/bash
-# Complete pipeline from scratch
+# Complete pipeline from scratch - UPDATED FOR RELIABILITY
 
 # 1. Setup (one time)
+source .venv/bin/activate  # Make sure you're in the right environment
 pip install wandb huggingface_hub
 wandb login
 huggingface-cli login
 
-# 2. Prepare dataset
-python examples/public_datasets.py \
-  --dataset llava \
-  --output my_dataset.json \
-  --limit 10000
+# 2. Prepare dataset (using reliable script)
+python examples/simple_public_datasets.py \
+  --dataset mixed \
+  --output datasets/my_dataset.json \
+  --limit 8000
 
 # 3. Train with monitoring
 python train_custom.py \
-  --custom_dataset_path my_dataset.json \
+  --custom_dataset_path datasets/my_dataset.json \
   --batch_size 8 \
   --max_training_steps 2000 \
   --log_wandb \
@@ -235,6 +249,13 @@ python upload_to_hf.py \
 
 echo "🎉 Success! Your model is at: https://huggingface.co/your-username/my-first-vlm"
 ```
+
+## 🚨 **Key Changes from Previous Instructions**
+
+1. **Use `simple_public_datasets.py`** instead of `public_datasets.py`
+2. **Always activate your virtual environment first**
+3. **Use `mixed` dataset for best reliability**
+4. **Images are automatically saved locally** (no manual downloads needed)
 
 This should get you from zero to a trained, publicly available vision-language model in under 2 hours (depending on your hardware)!
 
