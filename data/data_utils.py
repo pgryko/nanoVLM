@@ -13,10 +13,10 @@ def synchronized_dataloader_step(train_loader, is_dist):
         for batch in train_loader:
             yield batch
         return
-    
+
     # For DDP, we need synchronization.
     train_iter = iter(train_loader)
-    
+
     while True:
         try:
             batch = next(train_iter)
@@ -24,10 +24,10 @@ def synchronized_dataloader_step(train_loader, is_dist):
         except StopIteration:
             batch = None
             has_data = torch.tensor(0, device=torch.cuda.current_device())
-        
+
         # We synchronize across all ranks. If any rank is out of data, all ranks stop.
         dist.all_reduce(has_data, op=dist.ReduceOp.MIN)
-        
+
         if has_data.item() == 0:
             # At least one rank is out of data. All ranks should stop.
             break

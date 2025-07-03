@@ -16,11 +16,11 @@ def upload_model_to_hub(
     repo_name: str,
     private: bool = False,
     commit_message: str = "Upload NanoVLM model",
-    create_model_card: bool = True
+    create_model_card: bool = True,
 ):
     """
     Upload a trained NanoVLM model to Hugging Face Hub.
-    
+
     Args:
         checkpoint_path: Path to the model checkpoint directory
         repo_name: Name of the HF repository (e.g., "username/model-name")
@@ -32,38 +32,38 @@ def upload_model_to_hub(
     checkpoint_path = Path(checkpoint_path)
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-    
+
     # Load model to verify it works
     print(f"Loading model from {checkpoint_path}...")
     model = VisionLanguageModel.from_pretrained(str(checkpoint_path))
     config = model.config
-    
+
     # Create repository
     api = HfApi()
     print(f"Creating repository {repo_name}...")
-    
+
     try:
         create_repo(repo_id=repo_name, private=private, exist_ok=True)
     except Exception as e:
         print(f"Repository might already exist: {e}")
-    
+
     # Create model card if requested
     if create_model_card:
         model_card_path = checkpoint_path / "README.md"
         if not model_card_path.exists():
             print("Creating model card...")
             create_model_card_content(model_card_path, repo_name, config)
-    
+
     # Upload the model
     print(f"Uploading model to {repo_name}...")
     try:
         # Method 1: Use the model's built-in push_to_hub
         model.push_to_hub(repo_name, private=private, commit_message=commit_message)
         print(f"Successfully uploaded model to https://huggingface.co/{repo_name}")
-        
+
     except Exception as e:
         print(f"Error with push_to_hub, trying alternative method: {e}")
-        
+
         # Method 2: Upload folder directly
         api.upload_folder(
             folder_path=str(checkpoint_path),
@@ -76,10 +76,10 @@ def upload_model_to_hub(
 
 def create_model_card_content(save_path: Path, repo_name: str, config: VLMConfig):
     """Create a model card for the uploaded model."""
-    
+
     # Calculate model size
     param_count_m = 222  # Default, you can calculate from config
-    
+
     content = f"""---
 language:
 - en
@@ -201,39 +201,59 @@ If you use this model, please cite the original NanoVLM repository:
 
 This model is released under the Apache 2.0 license.
 """
-    
-    with open(save_path, 'w') as f:
+
+    with open(save_path, "w") as f:
         f.write(content)
-    
+
     print(f"Created model card at {save_path}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Upload NanoVLM model to Hugging Face Hub")
-    
-    parser.add_argument('--checkpoint_path', type=str, required=True,
-                        help='Path to model checkpoint directory')
-    parser.add_argument('--repo_name', type=str, required=True,
-                        help='HF repository name (e.g., username/model-name)')
-    parser.add_argument('--private', action='store_true',
-                        help='Create a private repository')
-    parser.add_argument('--commit_message', type=str, 
-                        default='Upload custom-trained NanoVLM model',
-                        help='Commit message for the upload')
-    parser.add_argument('--no_model_card', action='store_true',
-                        help='Skip creating model card')
-    parser.add_argument('--token', type=str, default=None,
-                        help='HuggingFace token (or use HF_TOKEN env var)')
-    
+    parser = argparse.ArgumentParser(
+        description="Upload NanoVLM model to Hugging Face Hub"
+    )
+
+    parser.add_argument(
+        "--checkpoint_path",
+        type=str,
+        required=True,
+        help="Path to model checkpoint directory",
+    )
+    parser.add_argument(
+        "--repo_name",
+        type=str,
+        required=True,
+        help="HF repository name (e.g., username/model-name)",
+    )
+    parser.add_argument(
+        "--private", action="store_true", help="Create a private repository"
+    )
+    parser.add_argument(
+        "--commit_message",
+        type=str,
+        default="Upload custom-trained NanoVLM model",
+        help="Commit message for the upload",
+    )
+    parser.add_argument(
+        "--no_model_card", action="store_true", help="Skip creating model card"
+    )
+    parser.add_argument(
+        "--token",
+        type=str,
+        default=None,
+        help="HuggingFace token (or use HF_TOKEN env var)",
+    )
+
     args = parser.parse_args()
-    
+
     # Set token if provided
     if args.token:
-        os.environ['HF_TOKEN'] = args.token
-    
+        os.environ["HF_TOKEN"] = args.token
+
     # Check if user is logged in
     try:
         from huggingface_hub import whoami
+
         user_info = whoami()
         print(f"Logged in as: {user_info['name']}")
     except Exception:
@@ -241,14 +261,14 @@ def main():
         print("  huggingface-cli login")
         print("Or provide a token with --token or HF_TOKEN environment variable")
         return
-    
+
     # Upload model
     upload_model_to_hub(
         checkpoint_path=args.checkpoint_path,
         repo_name=args.repo_name,
         private=args.private,
         commit_message=args.commit_message,
-        create_model_card=not args.no_model_card
+        create_model_card=not args.no_model_card,
     )
 
 
