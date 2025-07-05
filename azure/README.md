@@ -50,6 +50,8 @@ python submit_training_job.py \
   --dataset COCO \
   --batch_size 16 \
   --max_training_steps 5000 \
+  --push_to_hub \
+  --hub_model_id "your-username/nanovlm-coco-model" \
   --wandb_entity your-wandb-username
 ```
 
