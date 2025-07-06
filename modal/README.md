@@ -60,9 +60,36 @@ uv run python modal/test_modal_setup.py
 
 ## 🎯 Quick Start
 
-### 1. Prepare Your Dataset
+### Option 1: Integrated Dataset Building + Training (RECOMMENDED)
 
-Create a JSON file with your custom dataset:
+The easiest way to get started - build your dataset and train in a single Modal job:
+
+```bash
+# Super quick start with mixed dataset (COCO + VQAv2)
+./modal/quick_start_integrated.sh
+
+# Or customize your dataset building + training
+python modal/submit_modal_training.py \
+  --build_dataset \
+  --dataset_type mixed \
+  --dataset_limit 10000 \
+  --batch_size 8 \
+  --max_training_steps 3000 \
+  --compile \
+  --wandb_entity piotr-gryko-devalogic \
+  --push_to_hub \
+  --hub_model_id pgryko/nanovlm-COCO-VQAv2
+```
+
+**Available dataset types:**
+- `mixed` - COCO captions + VQAv2 (recommended for general use)
+- `coco` - COCO captions only (best for image description)
+- `vqav2` - VQAv2 only (best for question answering)
+- `llava` - LLaVA-style instruction following
+
+### Option 2: Use Your Own Dataset
+
+If you have a custom dataset, create a JSON file:
 
 ```json
 [
@@ -74,7 +101,7 @@ Create a JSON file with your custom dataset:
         ]
     },
     {
-        "image_path": "path/to/image2.jpg", 
+        "image_path": "path/to/image2.jpg",
         "conversations": [
             {"role": "user", "content": "Describe this scene."},
             {"role": "assistant", "content": "This is a beautiful sunset over the ocean."}
@@ -83,30 +110,16 @@ Create a JSON file with your custom dataset:
 ]
 ```
 
-### 2. Submit Training Job
+Then submit training:
 
 ```bash
-cd modal
-
-# Basic training
-python submit_modal_training.py \
+python modal/submit_modal_training.py \
   --custom_dataset_path ../datasets/my_dataset.json \
   --batch_size 8 \
   --max_training_steps 2000 \
-  --wandb_entity your_username
-
-# Advanced training with custom settings
-python submit_modal_training.py \
-  --custom_dataset_path ../datasets/my_dataset.json \
-  --image_root_dir ../datasets/images \
-  --batch_size 16 \
-  --gradient_accumulation_steps 2 \
-  --max_training_steps 5000 \
-  --lr_mp 0.01 \
-  --lr_backbones 1e-4 \
-  --compile \
   --wandb_entity your_username \
-  --wandb_project my-nanovlm-project
+  --push_to_hub \
+  --hub_model_id your_username/my-nanovlm-model
 ```
 
 ### 3. Monitor Training

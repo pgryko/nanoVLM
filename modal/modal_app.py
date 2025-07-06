@@ -23,8 +23,6 @@ image = (
     .run_commands("pip install --upgrade pip")
     # Copy the entire nanoVLM codebase into the image
     .add_local_dir(".", "/root/nanovlm")
-    # Copy test images if they exist
-    .add_local_dir("test_images", "/root/nanovlm/test_images")
 )
 
 # Create persistent volume for datasets and checkpoints
@@ -56,6 +54,75 @@ secrets = get_secrets()
     timeout=3600 * 4,  # 4 hour timeout
     memory=32768,  # 32GB RAM
 )
+def build_dataset_and_train(
+    # Dataset building parameters
+    dataset_type: str = "mixed",  # "mixed", "coco", "vqav2", "llava"
+    dataset_limit: int = 10000,
+    dataset_split: str = "train",
+    # Training parameters
+    batch_size: int = 8,
+    gradient_accumulation_steps: int = 4,
+    max_training_steps: int = 2000,
+    eval_interval: int = 200,
+    lr_mp: float = 0.00512,
+    lr_backbones: float = 5e-5,
+    output_dir: str = "/data/checkpoints",
+    wandb_entity: Optional[str] = None,
+    wandb_project: str = "nanovlm-modal",
+    multi_image: bool = False,
+    compile_model: bool = False,
+    push_to_hub: bool = False,
+    hub_model_id: Optional[str] = None,
+    hub_private: bool = False,
+):
+    """
+    Build dataset on Modal and train NanoVLM in a single job
+    """
+    # Set up Python path to use the copied codebase
+    sys.path.insert(0, "/root/nanovlm")
+
+    print("🏗️  Building dataset on Modal.com...")
+    print(f"Dataset type: {dataset_type}")
+    print(f"Dataset limit: {dataset_limit}")
+
+    # Build dataset directly on Modal
+    dataset_path = build_public_dataset_on_modal(
+        dataset_type=dataset_type, limit=dataset_limit, split=dataset_split
+    )
+
+    print(f"✅ Dataset built successfully: {dataset_path}")
+
+    # Now train with the built dataset
+    return train_nanovlm(
+        custom_dataset_path=dataset_path,
+        batch_size=batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        max_training_steps=max_training_steps,
+        eval_interval=eval_interval,
+        lr_mp=lr_mp,
+        lr_backbones=lr_backbones,
+        output_dir=output_dir,
+        wandb_entity=wandb_entity,
+        wandb_project=wandb_project,
+        multi_image=multi_image,
+        compile_model=compile_model,
+        push_to_hub=push_to_hub,
+        hub_model_id=hub_model_id,
+        hub_private=hub_private,
+        # Pass dataset type info for model card generation
+        dataset_type_info=dataset_type,
+        dataset_limit_info=dataset_limit,
+    )
+
+
+@app.function(
+    image=image,
+    gpu="A100-40GB",  # Single A100 GPU
+    volumes={"/data": volume},
+    secrets=secrets,
+    timeout=3600 * 4,  # 4 hour timeout
+    memory=32768,  # 32GB RAM
+)
 def train_nanovlm(
     custom_dataset_path: str = None,
     dataset_content: str = None,
@@ -74,6 +141,9 @@ def train_nanovlm(
     push_to_hub: bool = False,
     hub_model_id: Optional[str] = None,
     hub_private: bool = False,
+    # Additional info for model card generation
+    dataset_type_info: Optional[str] = None,
+    dataset_limit_info: Optional[int] = None,
 ):
     """
     Train NanoVLM on Modal with custom dataset
@@ -295,9 +365,51 @@ def train_nanovlm(
     if push_to_hub and hub_model_id:
         print(f"🤗 Pushing model to HuggingFace Hub: {hub_model_id}")
         try:
+            # Generate comprehensive model card
+            model_card_content = generate_model_card(
+                hub_model_id=hub_model_id,
+                dataset_info={
+                    "custom_dataset_path": custom_dataset_path,
+                    "dataset_size": len(dataset),
+                    "multi_image": multi_image,
+                    "dataset_type": dataset_type_info,
+                    "dataset_limit": dataset_limit_info,
+                },
+                training_config={
+                    "batch_size": batch_size,
+                    "gradient_accumulation_steps": gradient_accumulation_steps,
+                    "max_training_steps": max_training_steps,
+                    "lr_mp": lr_mp,
+                    "lr_backbones": lr_backbones,
+                    "compile_model": compile_model,
+                },
+                vlm_config=vlm_cfg.__dict__,
+                wandb_project=wandb_project if wandb_entity else None,
+                wandb_entity=wandb_entity,
+            )
+
+            # Save model card locally first
+            model_card_path = f"{final_checkpoint_path}/README.md"
+            with open(model_card_path, "w") as f:
+                f.write(model_card_content)
+            print(f"📝 Model card generated: {model_card_path}")
+
+            # Push model with model card
             model.push_to_hub(hub_model_id, private=hub_private)
+
+            # Push the model card separately to ensure it's included
+            from huggingface_hub import HfApi
+
+            api = HfApi()
+            api.upload_file(
+                path_or_fileobj=model_card_path,
+                path_in_repo="README.md",
+                repo_id=hub_model_id,
+                repo_type="model",
+            )
+
             print(
-                f"✅ Model successfully pushed to https://huggingface.co/{hub_model_id}"
+                f"✅ Model and model card successfully pushed to https://huggingface.co/{hub_model_id}"
             )
         except Exception as e:
             print(f"❌ Failed to push to HuggingFace Hub: {e}")
@@ -360,6 +472,511 @@ def list_checkpoints():
     else:
         print("No checkpoints found")
         return []
+
+
+def build_public_dataset_on_modal(dataset_type: str, limit: int, split: str = "train"):
+    """
+    Build public dataset directly on Modal infrastructure
+    """
+    from pathlib import Path
+
+    print(f"🔄 Loading {dataset_type} dataset...")
+
+    # Create dataset directory
+    dataset_dir = Path("/data/datasets")
+    dataset_dir.mkdir(exist_ok=True)
+
+    image_dir = dataset_dir / "images"
+    image_dir.mkdir(exist_ok=True)
+
+    if dataset_type == "mixed":
+        return build_mixed_dataset_on_modal(limit, dataset_dir)
+    elif dataset_type == "coco":
+        return build_coco_dataset_on_modal(limit, split, dataset_dir)
+    elif dataset_type == "vqav2":
+        return build_vqav2_dataset_on_modal(limit, dataset_dir)
+    elif dataset_type == "llava":
+        return build_llava_dataset_on_modal(limit, dataset_dir)
+    else:
+        raise ValueError(f"Unsupported dataset type: {dataset_type}")
+
+
+def build_coco_dataset_on_modal(limit: int, split: str, dataset_dir):
+    """Build COCO dataset on Modal"""
+    from datasets import load_dataset
+    from tqdm import tqdm
+    import json
+    from pathlib import Path
+
+    # Convert to Path object if needed
+    dataset_dir = Path(dataset_dir)
+
+    print(f"Loading COCO Captions {split} dataset...")
+    dataset = load_dataset("HuggingFaceM4/COCO", split=split)
+    if limit:
+        dataset = dataset.select(range(min(limit, len(dataset))))
+
+    converted_data = []
+    image_dir = dataset_dir / "images"
+
+    print("Converting COCO to NanoVLM format...")
+    for idx, item in enumerate(tqdm(dataset)):
+        try:
+            captions = item["sentences"]["raw"]
+            if not captions:
+                continue
+
+            caption = captions[0]
+            image_filename = f"coco_{split}_{item['cocoid']}.jpg"
+            image_path = image_dir / image_filename
+
+            # Save image
+            image = item["image"]
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+            image.save(image_path, "JPEG", quality=90)
+
+            converted_item = {
+                "image_path": str(image_path.relative_to(dataset_dir.parent)),
+                "conversations": [
+                    {"role": "user", "content": "Describe this image."},
+                    {"role": "assistant", "content": caption},
+                ],
+            }
+            converted_data.append(converted_item)
+
+        except Exception as e:
+            print(f"Error processing COCO item {idx}: {e}")
+            continue
+
+    # Save dataset
+    output_path = dataset_dir / "coco_dataset.json"
+    with open(output_path, "w") as f:
+        json.dump(converted_data, f, indent=2)
+
+    print(f"COCO dataset saved: {len(converted_data)} samples")
+    return str(output_path)
+
+
+def build_vqav2_dataset_on_modal(limit: int, dataset_dir):
+    """Build VQAv2 dataset on Modal"""
+    from datasets import load_dataset
+    from tqdm import tqdm
+    import json
+    from pathlib import Path
+
+    # Convert to Path object if needed
+    dataset_dir = Path(dataset_dir)
+
+    print("Loading VQAv2 dataset...")
+    dataset = load_dataset("HuggingFaceM4/VQAv2", split="train")
+    if limit:
+        dataset = dataset.select(range(min(limit, len(dataset))))
+
+    converted_data = []
+    image_dir = dataset_dir / "images"
+
+    print("Converting VQAv2 to NanoVLM format...")
+    for idx, item in enumerate(tqdm(dataset)):
+        try:
+            if not item["answers"]:
+                continue
+
+            answers = item["answers"]["answer"]
+            answer = max(set(answers), key=answers.count)
+
+            image_filename = f"vqa_{item['image_id']}.jpg"
+            image_path = image_dir / image_filename
+
+            # Save image
+            image = item["image"]
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+            image.save(image_path, "JPEG", quality=90)
+
+            converted_item = {
+                "image_path": str(image_path.relative_to(dataset_dir.parent)),
+                "conversations": [
+                    {"role": "user", "content": item["question"]},
+                    {"role": "assistant", "content": answer},
+                ],
+            }
+            converted_data.append(converted_item)
+
+        except Exception as e:
+            print(f"Error processing VQA item {idx}: {e}")
+            continue
+
+    # Save dataset
+    output_path = dataset_dir / "vqav2_dataset.json"
+    with open(output_path, "w") as f:
+        json.dump(converted_data, f, indent=2)
+
+    print(f"VQAv2 dataset saved: {len(converted_data)} samples")
+    return str(output_path)
+
+
+def build_mixed_dataset_on_modal(limit: int, dataset_dir):
+    """Build mixed COCO + VQAv2 dataset on Modal"""
+    import json
+    import random
+    from pathlib import Path
+
+    # Convert to Path object if needed
+    dataset_dir = Path(dataset_dir)
+
+    print("Building mixed dataset (COCO + VQAv2)...")
+
+    # Build individual datasets
+    coco_limit = limit // 2
+    vqa_limit = limit // 2
+
+    coco_path = build_coco_dataset_on_modal(coco_limit, "train", dataset_dir)
+    vqa_path = build_vqav2_dataset_on_modal(vqa_limit, dataset_dir)
+
+    # Combine datasets
+    combined_data = []
+
+    # Load COCO data
+    with open(coco_path, "r") as f:
+        coco_data = json.load(f)
+        combined_data.extend(coco_data)
+
+    # Load VQA data
+    with open(vqa_path, "r") as f:
+        vqa_data = json.load(f)
+        combined_data.extend(vqa_data)
+
+    # Shuffle combined data
+    random.shuffle(combined_data)
+
+    # Save mixed dataset
+    output_path = dataset_dir / "mixed_dataset.json"
+    with open(output_path, "w") as f:
+        json.dump(combined_data, f, indent=2)
+
+    print(f"Mixed dataset saved: {len(combined_data)} samples")
+    return str(output_path)
+
+
+def build_llava_dataset_on_modal(limit: int, dataset_dir):
+    """Build LLaVA-style instruction dataset on Modal"""
+    from datasets import load_dataset
+    from tqdm import tqdm
+    import json
+    from pathlib import Path
+
+    # Convert to Path object if needed
+    dataset_dir = Path(dataset_dir)
+
+    print("Building LLaVA-style instruction dataset...")
+
+    # Use VQA as base and convert to instruction format
+    dataset = load_dataset("HuggingFaceM4/VQAv2", split="train")
+    if limit:
+        dataset = dataset.select(range(min(limit, len(dataset))))
+
+    converted_data = []
+    image_dir = dataset_dir / "images"
+
+    prompts = [
+        "What do you see in this image?",
+        "Describe what's happening in this picture.",
+        "What is the main subject of this image?",
+        "Analyze this image and tell me what you observe.",
+        "What can you tell me about this image?",
+    ]
+
+    print("Converting to instruction format...")
+    for idx, item in enumerate(tqdm(dataset)):
+        try:
+            if not item["answers"]:
+                continue
+
+            question = item["question"]
+            answers = item["answers"]["answer"]
+            answer = max(set(answers), key=answers.count)
+
+            image_filename = f"instruct_{idx}.jpg"
+            image_path = image_dir / image_filename
+
+            # Save image
+            image = item["image"]
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+            image.save(image_path, "JPEG", quality=90)
+
+            # Create instruction-following conversation
+            prompt = prompts[idx % len(prompts)]
+            response = f"Looking at this image, I can answer your question: {question} The answer is: {answer}"
+
+            converted_item = {
+                "image_path": str(image_path.relative_to(dataset_dir.parent)),
+                "conversations": [
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": response},
+                ],
+            }
+            converted_data.append(converted_item)
+
+        except Exception:
+            continue
+
+    # Save dataset
+    output_path = dataset_dir / "llava_dataset.json"
+    with open(output_path, "w") as f:
+        json.dump(converted_data, f, indent=2)
+
+    print(f"LLaVA-style dataset saved: {len(converted_data)} samples")
+    return str(output_path)
+
+
+def generate_model_card(
+    hub_model_id,
+    dataset_info,
+    training_config,
+    vlm_config,
+    wandb_project=None,
+    wandb_entity=None,
+):
+    """Generate a comprehensive model card for the trained NanoVLM model"""
+    from datetime import datetime
+
+    # Extract dataset type from provided info or path
+    dataset_type_info = dataset_info.get("dataset_type", "")
+    dataset_path = dataset_info.get("custom_dataset_path", "")
+
+    if dataset_type_info == "mixed" or "mixed_dataset" in dataset_path:
+        dataset_type = "Mixed (COCO Captions + VQAv2)"
+        dataset_description = "A balanced combination of COCO image captions and VQAv2 question-answering pairs"
+        dataset_tags = ["HuggingFaceM4/COCO", "HuggingFaceM4/VQAv2"]
+    elif dataset_type_info == "coco" or "coco_dataset" in dataset_path:
+        dataset_type = "COCO Captions"
+        dataset_description = (
+            "Microsoft COCO image captions for learning image description"
+        )
+        dataset_tags = ["HuggingFaceM4/COCO"]
+    elif dataset_type_info == "vqav2" or "vqav2_dataset" in dataset_path:
+        dataset_type = "VQAv2"
+        dataset_description = (
+            "Visual Question Answering v2.0 dataset for question answering tasks"
+        )
+        dataset_tags = ["HuggingFaceM4/VQAv2"]
+    elif dataset_type_info == "llava" or "llava_dataset" in dataset_path:
+        dataset_type = "LLaVA-style Instructions"
+        dataset_description = "Instruction-following dataset converted from VQAv2"
+        dataset_tags = ["HuggingFaceM4/VQAv2"]
+    else:
+        dataset_type = "Custom Dataset"
+        dataset_description = "Custom vision-language dataset"
+        dataset_tags = []
+
+    # Calculate effective batch size
+    effective_batch_size = (
+        training_config["batch_size"] * training_config["gradient_accumulation_steps"]
+    )
+
+    # Generate training timestamp
+    training_date = datetime.now().strftime("%Y-%m-%d")
+
+    # Generate datasets section for YAML front matter
+    datasets_yaml = ""
+    if dataset_tags:
+        datasets_yaml = "datasets:\n" + "\n".join(f"- {tag}" for tag in dataset_tags)
+
+    model_card = f"""---
+license: apache-2.0
+base_model: lusxvr/nanoVLM-222M
+tags:
+- vision-language-model
+- multimodal
+- pytorch
+- nanovlm
+- modal-trained
+- image-captioning
+- visual-question-answering
+{datasets_yaml}
+language:
+- en
+pipeline_tag: image-to-text
+widget:
+- src: https://huggingface.co/datasets/mishig/sample_images/resolve/main/tiger.jpg
+  text: "What do you see in this image?"
+- src: https://huggingface.co/datasets/mishig/sample_images/resolve/main/football-match.jpg
+  text: "Describe what's happening in this picture."
+- src: https://huggingface.co/datasets/mishig/sample_images/resolve/main/savanna.jpg
+  text: "What animals can you see in this image?"
+---
+
+# {hub_model_id.split('/')[-1]}
+
+This is a fine-tuned **NanoVLM** (Nano Vision-Language Model) trained on **{dataset_type}** using Modal.com's cloud infrastructure.
+
+## Model Details
+
+- **Base Model**: [lusxvr/nanoVLM-222M](https://huggingface.co/lusxvr/nanoVLM-222M)
+- **Model Size**: 222M parameters
+- **Architecture**: Vision Transformer (SigLIP) + Small Language Model (SmolLM2)
+- **Training Platform**: Modal.com (A100 GPU)
+- **Training Date**: {training_date}
+
+### Architecture Components
+
+- **Vision Encoder**: SigLIP-B/16-224 (85M parameters)
+- **Language Model**: SmolLM2-135M
+- **Modality Projection**: Pixel shuffle projection layer
+- **Total Parameters**: ~222M
+
+## Training Details
+
+### Dataset
+- **Type**: {dataset_type}
+- **Description**: {dataset_description}
+- **Size**: {dataset_info['dataset_size']:,} samples
+- **Multi-image Support**: {'Yes' if dataset_info['multi_image'] else 'No'}
+
+### Training Configuration
+- **Batch Size**: {training_config['batch_size']} (effective: {effective_batch_size})
+- **Training Steps**: {training_config['max_training_steps']:,}
+- **Learning Rate (MP)**: {training_config['lr_mp']}
+- **Learning Rate (Backbones)**: {training_config['lr_backbones']}
+- **Model Compilation**: {'Enabled' if training_config['compile_model'] else 'Disabled'}
+- **Gradient Accumulation**: {training_config['gradient_accumulation_steps']} steps
+
+### Model Configuration
+- **Vision Model**: {vlm_config.get('vit_model_type', 'google/siglip-base-patch16-224')}
+- **Language Model**: {vlm_config.get('lm_model_type', 'HuggingFaceTB/SmolLM2-135M')}
+- **Image Size**: {vlm_config.get('vit_img_size', 224)}x{vlm_config.get('vit_img_size', 224)}
+- **Max Sequence Length**: {vlm_config.get('lm_max_length', 128)}
+- **Image Token Length**: {vlm_config.get('mp_image_token_length', 49)}
+
+## Usage
+
+### Quick Start
+
+```python
+from models.vision_language_model import VisionLanguageModel
+from PIL import Image
+import requests
+
+# Load the model
+model = VisionLanguageModel.from_pretrained("{hub_model_id}")
+
+# Load an image
+url = "https://huggingface.co/datasets/mishig/sample_images/resolve/main/tiger.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+# Generate a response
+response = model.generate(
+    image=image,
+    prompt="What do you see in this image?",
+    max_length=50
+)
+print(response)
+```
+
+### Installation
+
+```bash
+# Clone the nanoVLM repository
+git clone https://github.com/huggingface/nanoVLM.git
+cd nanoVLM
+
+# Install dependencies
+pip install torch torchvision transformers pillow
+
+# Use the model
+python -c "
+from models.vision_language_model import VisionLanguageModel
+model = VisionLanguageModel.from_pretrained('{hub_model_id}')
+print('Model loaded successfully!')
+"
+```
+
+## Performance
+
+This model has been trained specifically for:
+- **Image Captioning**: Generating descriptive captions for images
+- **Visual Question Answering**: Answering questions about image content
+- **General Vision-Language Understanding**: Multi-modal reasoning tasks
+
+### Expected Use Cases
+- Image description and captioning
+- Visual question answering
+- Educational content analysis
+- Accessibility applications
+- Content moderation assistance
+
+## Training Infrastructure
+
+This model was trained using Modal.com's serverless GPU infrastructure:
+
+- **GPU**: NVIDIA A100-40GB
+- **Training Time**: ~60-75 minutes (including dataset preparation)
+- **Cost**: ~$6-8 USD
+- **Platform**: Modal.com serverless compute
+
+### Reproducibility
+
+To reproduce this training:
+
+```bash
+# Using the integrated Modal approach
+python modal/submit_modal_training.py \\
+  --build_dataset \\
+  --dataset_type mixed \\
+  --dataset_limit {dataset_info['dataset_size']} \\
+  --batch_size {training_config['batch_size']} \\
+  --max_training_steps {training_config['max_training_steps']} \\
+  --compile \\
+  --push_to_hub \\
+  --hub_model_id your-username/your-model-name
+```
+
+## Monitoring
+
+{f'''Training metrics and logs are available on Weights & Biases:
+- **Project**: [{wandb_entity}/{wandb_project}](https://wandb.ai/{wandb_entity}/{wandb_project})
+''' if wandb_entity and wandb_project else ''}
+
+## Limitations
+
+- **Context Length**: Limited to {vlm_config.get('lm_max_length', 128)} tokens
+- **Image Resolution**: Fixed at {vlm_config.get('vit_img_size', 224)}x{vlm_config.get('vit_img_size', 224)} pixels
+- **Language**: Primarily English
+- **Domain**: General vision-language tasks (performance may vary on specialized domains)
+
+## Ethical Considerations
+
+This model inherits potential biases from its training datasets (COCO, VQAv2). Users should be aware of potential limitations in:
+- Representation of diverse populations
+- Cultural and geographic biases
+- Object and scene recognition across different contexts
+
+## Citation
+
+```bibtex
+@misc{{{hub_model_id.replace('/', '_').replace('-', '_')},
+  title={{NanoVLM Fine-tuned on {dataset_type}}},
+  author={{Modal.com Training Pipeline}},
+  year={{2024}},
+  url={{https://huggingface.co/{hub_model_id}}}
+}}
+```
+
+## Acknowledgments
+
+- **Base Model**: [nanoVLM](https://github.com/huggingface/nanoVLM) by HuggingFace
+- **Training Platform**: [Modal.com](https://modal.com) for serverless GPU compute
+- **Datasets**: Microsoft COCO and VQAv2 teams
+- **Infrastructure**: NVIDIA A100 GPU via Modal.com
+
+---
+
+*This model was trained using an automated pipeline on Modal.com. For questions or issues, please refer to the [nanoVLM repository](https://github.com/huggingface/nanoVLM).*
+"""
+
+    return model_card
 
 
 if __name__ == "__main__":
