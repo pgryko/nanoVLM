@@ -75,7 +75,7 @@ def submit_dataset_build_and_training_job(args):
 
     # Import the Modal app
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from modal_app import app, build_dataset_and_train
+    from modal_app_fixed import app, build_dataset_and_train
 
     print("🚀 Submitting integrated dataset building + training job to Modal.com")
     print(f"Dataset type: {args.dataset_type}")
@@ -144,7 +144,7 @@ def submit_training_job(args):
 
     # Import the Modal app
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from modal_app import app, train_nanovlm
+    from modal_app_fixed import app, train_nanovlm
 
     print("🚀 Submitting NanoVLM training job to Modal.com")
     print(f"Dataset: {args.custom_dataset_path}")
