@@ -1,8 +1,6 @@
 # IDE files
 .idea/
-.idea/*
 .vscode/
-.vscode/*
 *.swp
 *.swo
 
@@ -11,35 +9,29 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
 
 # OS files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
 # Git
 .git/
-.gitignore
 
 # Virtual environments
 .venv/
 venv/
 env/
 
-# Logs
+# Logs and temporary files
 *.log
 logs/
+temp/
+tmp/
 
-# Test files
-test_data/
-test_checkpoints/
-temp_test/
-datasets/modal_test.json
+# Test artifacts
+test_*/
+*_test.py
+*_debug.py
 
 # Build artifacts
 build/
@@ -49,12 +41,8 @@ dist/
 # Jupyter
 .ipynb_checkpoints/
 
-# Coverage
+# Coverage and testing
 .coverage
 htmlcov/
-
-# MyPy
-.mypy_cache/
-
-# Pytest
 .pytest_cache/
+.mypy_cache/
