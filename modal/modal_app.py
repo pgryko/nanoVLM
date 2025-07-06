@@ -92,9 +92,15 @@ def build_dataset_and_train(
 
     print(f"✅ Dataset built successfully: {dataset_path}")
 
-    # Now train with the built dataset
-    return train_nanovlm(
+    # Now train with the built dataset - call the training logic directly
+    # Set image_root_dir to the dataset directory where images are stored
+    from pathlib import Path
+
+    dataset_dir = Path(dataset_path).parent
+
+    return train_nanovlm_internal(
         custom_dataset_path=dataset_path,
+        image_root_dir=str(dataset_dir),  # Point to the dataset directory
         batch_size=batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
         max_training_steps=max_training_steps,
@@ -115,15 +121,7 @@ def build_dataset_and_train(
     )
 
 
-@app.function(
-    image=image,
-    gpu="A100-40GB",  # Single A100 GPU
-    volumes={"/data": volume},
-    secrets=secrets,
-    timeout=3600 * 4,  # 4 hour timeout
-    memory=32768,  # 32GB RAM
-)
-def train_nanovlm(
+def train_nanovlm_internal(
     custom_dataset_path: str = None,
     dataset_content: str = None,
     batch_size: int = 8,
@@ -146,7 +144,7 @@ def train_nanovlm(
     dataset_limit_info: Optional[int] = None,
 ):
     """
-    Train NanoVLM on Modal with custom dataset
+    Train NanoVLM on Modal with custom dataset (internal implementation)
     """
     # Set up Python path to use the copied codebase
     sys.path.insert(0, "/root/nanovlm")
@@ -424,6 +422,60 @@ def train_nanovlm(
 
 @app.function(
     image=image,
+    gpu="A100-40GB",  # Single A100 GPU
+    volumes={"/data": volume},
+    secrets=secrets,
+    timeout=3600 * 4,  # 4 hour timeout
+    memory=32768,  # 32GB RAM
+)
+def train_nanovlm(
+    custom_dataset_path: str = None,
+    dataset_content: str = None,
+    batch_size: int = 8,
+    gradient_accumulation_steps: int = 4,
+    max_training_steps: int = 2000,
+    eval_interval: int = 200,
+    lr_mp: float = 0.00512,
+    lr_backbones: float = 5e-5,
+    output_dir: str = "/data/checkpoints",
+    wandb_entity: Optional[str] = None,
+    wandb_project: str = "nanovlm-modal",
+    multi_image: bool = False,
+    compile_model: bool = False,
+    image_root_dir: Optional[str] = None,
+    push_to_hub: bool = False,
+    hub_model_id: Optional[str] = None,
+    hub_private: bool = False,
+):
+    """
+    Train NanoVLM on Modal with custom dataset (wrapper function)
+    """
+    # Set up Python path to use the copied codebase
+    sys.path.insert(0, "/root/nanovlm")
+
+    return train_nanovlm_internal(
+        custom_dataset_path=custom_dataset_path,
+        dataset_content=dataset_content,
+        batch_size=batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        max_training_steps=max_training_steps,
+        eval_interval=eval_interval,
+        lr_mp=lr_mp,
+        lr_backbones=lr_backbones,
+        output_dir=output_dir,
+        wandb_entity=wandb_entity,
+        wandb_project=wandb_project,
+        multi_image=multi_image,
+        compile_model=compile_model,
+        image_root_dir=image_root_dir,
+        push_to_hub=push_to_hub,
+        hub_model_id=hub_model_id,
+        hub_private=hub_private,
+    )
+
+
+@app.function(
+    image=image,
     volumes={"/data": volume},
     timeout=300,
 )
@@ -512,7 +564,7 @@ def build_coco_dataset_on_modal(limit: int, split: str, dataset_dir):
     dataset_dir = Path(dataset_dir)
 
     print(f"Loading COCO Captions {split} dataset...")
-    dataset = load_dataset("HuggingFaceM4/COCO", split=split)
+    dataset = load_dataset("HuggingFaceM4/COCO", split=split, trust_remote_code=True)
     if limit:
         dataset = dataset.select(range(min(limit, len(dataset))))
 
@@ -537,7 +589,7 @@ def build_coco_dataset_on_modal(limit: int, split: str, dataset_dir):
             image.save(image_path, "JPEG", quality=90)
 
             converted_item = {
-                "image_path": str(image_path.relative_to(dataset_dir.parent)),
+                "image_path": str(image_path.relative_to(dataset_dir)),
                 "conversations": [
                     {"role": "user", "content": "Describe this image."},
                     {"role": "assistant", "content": caption},
@@ -569,7 +621,7 @@ def build_vqav2_dataset_on_modal(limit: int, dataset_dir):
     dataset_dir = Path(dataset_dir)
 
     print("Loading VQAv2 dataset...")
-    dataset = load_dataset("HuggingFaceM4/VQAv2", split="train")
+    dataset = load_dataset("HuggingFaceM4/VQAv2", split="train", trust_remote_code=True)
     if limit:
         dataset = dataset.select(range(min(limit, len(dataset))))
 
@@ -595,7 +647,7 @@ def build_vqav2_dataset_on_modal(limit: int, dataset_dir):
             image.save(image_path, "JPEG", quality=90)
 
             converted_item = {
-                "image_path": str(image_path.relative_to(dataset_dir.parent)),
+                "image_path": str(image_path.relative_to(dataset_dir)),
                 "conversations": [
                     {"role": "user", "content": item["question"]},
                     {"role": "assistant", "content": answer},
@@ -672,7 +724,7 @@ def build_llava_dataset_on_modal(limit: int, dataset_dir):
     print("Building LLaVA-style instruction dataset...")
 
     # Use VQA as base and convert to instruction format
-    dataset = load_dataset("HuggingFaceM4/VQAv2", split="train")
+    dataset = load_dataset("HuggingFaceM4/VQAv2", split="train", trust_remote_code=True)
     if limit:
         dataset = dataset.select(range(min(limit, len(dataset))))
 
@@ -711,7 +763,7 @@ def build_llava_dataset_on_modal(limit: int, dataset_dir):
             response = f"Looking at this image, I can answer your question: {question} The answer is: {answer}"
 
             converted_item = {
-                "image_path": str(image_path.relative_to(dataset_dir.parent)),
+                "image_path": str(image_path.relative_to(dataset_dir)),
                 "conversations": [
                     {"role": "user", "content": prompt},
                     {"role": "assistant", "content": response},

@@ -13,7 +13,7 @@ if ! command -v modal &> /dev/null; then
 fi
 
 # Check if user is authenticated
-if modal token list &> /dev/null; then
+if modal token list &> /dev/null 2>&1; then
     echo "✅ Modal authentication verified"
 else
     echo "🔐 Setting up Modal authentication..."

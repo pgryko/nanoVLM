@@ -20,7 +20,7 @@ def convert_coco_captions(output_path: str, split: str = "train", limit: int = N
     """
     print(f"Loading COCO Captions {split} dataset...")
 
-    dataset = load_dataset("HuggingFaceM4/COCO", split=split)
+    dataset = load_dataset("HuggingFaceM4/COCO", split=split, trust_remote_code=True)
     if limit:
         dataset = dataset.select(range(min(limit, len(dataset))))
 
@@ -68,7 +68,7 @@ def convert_vqav2(output_path: str, limit: int = None):
     """
     print("Loading VQAv2 dataset...")
 
-    dataset = load_dataset("HuggingFaceM4/VQAv2", split="train")
+    dataset = load_dataset("HuggingFaceM4/VQAv2", split="train", trust_remote_code=True)
     if limit:
         dataset = dataset.select(range(min(limit, len(dataset))))
 
@@ -117,7 +117,9 @@ def convert_llava_alternative(output_path: str, limit: int = None):
 
     try:
         # Try a more reliable instruction following dataset
-        dataset = load_dataset("HuggingFaceM4/VQAv2", split="train")  # Fallback to VQA
+        dataset = load_dataset(
+            "HuggingFaceM4/VQAv2", split="train", trust_remote_code=True
+        )  # Fallback to VQA
 
         if limit:
             dataset = dataset.select(range(min(limit, len(dataset))))
