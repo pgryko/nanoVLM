@@ -113,9 +113,26 @@ def submit_dataset_build_and_training_job(args):
     # Submit integrated job
     try:
         print("🎯 Starting dataset building + training on Modal...")
-        with app.run():
+        print("💡 Using detached mode - job will continue even if you disconnect")
+        print("📊 Monitor progress at: https://modal.com/apps")
+        if wandb_entity:
+            print(
+                f"📈 Monitor training at: https://wandb.ai/{wandb_entity}/nanovlm-modal"
+            )
+        print()
+
+        with app.run(detach=True):
             result = build_dataset_and_train.remote(**training_kwargs)
-            print(f"✅ Training completed! Model saved to: {result}")
+            print("✅ Training job submitted successfully!")
+            print("🔗 Job running at: https://modal.com/apps")
+            if wandb_entity:
+                print(
+                    f"📊 W&B dashboard: https://wandb.ai/{wandb_entity}/nanovlm-modal"
+                )
+            if training_kwargs.get("hub_model_id"):
+                print(
+                    f"🤗 Model will be available at: https://huggingface.co/{training_kwargs['hub_model_id']}"
+                )
             return True
     except Exception as e:
         print(f"❌ Training failed: {e}")
@@ -193,9 +210,18 @@ def submit_training_job(args):
     # Submit training job
     try:
         print("🎯 Starting training on Modal...")
-        with app.run():
+        print("💡 Using detached mode - job will continue even if you disconnect")
+        print("📊 Monitor progress at: https://modal.com/apps")
+        if wandb_entity:
+            print(
+                f"📈 Monitor training at: https://wandb.ai/{wandb_entity}/nanovlm-modal"
+            )
+        print()
+
+        with app.run(detach=True):
             result = train_nanovlm.remote(**training_kwargs)
-            print(f"✅ Training completed! Model saved to: {result}")
+            print("✅ Training job submitted successfully!")
+            print("🔗 Job running at: https://modal.com/apps")
             return True
     except Exception as e:
         print(f"❌ Training failed: {e}")

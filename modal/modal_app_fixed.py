@@ -51,8 +51,9 @@ secrets = get_secrets()
     gpu="A100-40GB",  # Single A100 GPU
     volumes={"/data": volume},
     secrets=secrets,
-    timeout=3600 * 4,  # 4 hour timeout
+    timeout=3600 * 6,  # 6 hour timeout for larger datasets
     memory=32768,  # 32GB RAM
+    min_containers=1,  # Keep one instance warm to avoid cold starts
 )
 def build_dataset_and_train(
     # Dataset building parameters
@@ -200,6 +201,31 @@ def build_dataset_and_train(
         )
         model = model.to(device)
 
+        # Check for existing checkpoints to resume from
+        import glob
+
+        existing_checkpoints = glob.glob(f"{output_dir}/nanovlm_step_*")
+        start_step = 0
+
+        if existing_checkpoints:
+            # Find the latest checkpoint
+            latest_checkpoint = max(
+                existing_checkpoints, key=lambda x: int(x.split("_")[-1])
+            )
+            start_step = int(latest_checkpoint.split("_")[-1])
+            print(f"🔄 Found existing checkpoint: {latest_checkpoint}")
+            print(f"🔄 Resuming from step {start_step}")
+
+            # Load the checkpoint
+            try:
+                model = VisionLanguageModel.from_pretrained(latest_checkpoint)
+                model = model.to(device)
+                print(f"✅ Successfully loaded checkpoint from step {start_step}")
+            except Exception as e:
+                print(f"⚠️  Failed to load checkpoint: {e}")
+                print("🔄 Starting from scratch")
+                start_step = 0
+
         if compile_model:
             print("Compiling model with torch.compile...")
             model = torch.compile(model)
@@ -223,10 +249,22 @@ def build_dataset_and_train(
 
         # Training loop
         model.train()
-        global_step = 0
+        global_step = start_step  # Resume from checkpoint if available
         total_loss = 0.0
+        start_time = time.time()
 
-        print("Starting training...")
+        if start_step > 0:
+            print(f"🔄 Resuming training from step {start_step}")
+        else:
+            print("🚀 Starting training from scratch...")
+
+        print(f"📊 Dataset size: {len(dataset):,} samples")
+        print(f"🎯 Target steps: {max_training_steps:,}")
+        remaining_steps = max_training_steps - start_step
+        print(f"📈 Remaining steps: {remaining_steps:,}")
+        print(
+            f"⏱️  Estimated duration: {remaining_steps * batch_size / len(dataset) * 60:.1f} minutes"
+        )
 
         for epoch in range(100):  # Large number, will break based on max_training_steps
             for batch_idx, batch in enumerate(dataloader):
@@ -274,16 +312,36 @@ def build_dataset_and_train(
                             }
                         )
 
-                    if global_step % 50 == 0:
+                    # More frequent progress updates
+                    if global_step % 25 == 0:
+                        elapsed_time = time.time() - start_time
+                        progress = global_step / max_training_steps
+                        eta = (
+                            (elapsed_time / progress - elapsed_time)
+                            if progress > 0
+                            else 0
+                        )
                         print(
-                            f"Step {global_step}/{max_training_steps}, Loss: {avg_loss:.4f}"
+                            f"Step {global_step}/{max_training_steps} ({progress:.1%}), "
+                            f"Loss: {avg_loss:.4f}, "
+                            f"Elapsed: {elapsed_time/60:.1f}min, "
+                            f"ETA: {eta/60:.1f}min"
                         )
 
-                    # Save checkpoint
-                    if global_step % eval_interval == 0:
+                    # More frequent checkpointing for safety
+                    checkpoint_interval = min(
+                        eval_interval, 100
+                    )  # At least every 100 steps
+                    if global_step % checkpoint_interval == 0:
                         checkpoint_path = f"{output_dir}/nanovlm_step_{global_step}"
-                        print(f"Saving checkpoint to {checkpoint_path}")
+                        print(f"💾 Saving checkpoint to {checkpoint_path}")
                         model.save_pretrained(checkpoint_path)
+
+                        # Also save to volume for persistence
+                        volume.commit()
+                        print(
+                            f"✅ Checkpoint {global_step} saved and committed to volume"
+                        )
 
                     total_loss = 0.0
 
@@ -295,8 +353,15 @@ def build_dataset_and_train(
 
         # Save final model
         final_checkpoint_path = f"{output_dir}/nanovlm_final"
-        print(f"Saving final model to {final_checkpoint_path}")
+        print(f"💾 Saving final model to {final_checkpoint_path}")
         model.save_pretrained(final_checkpoint_path)
+
+        # Commit to volume for persistence
+        volume.commit()
+        print("✅ Final model saved and committed to volume")
+
+        total_training_time = time.time() - start_time
+        print(f"🎉 Training completed in {total_training_time/60:.1f} minutes")
 
         # Push to HuggingFace Hub if requested
         if push_to_hub and hub_model_id:
@@ -332,9 +397,12 @@ def build_dataset_and_train(
                 print(f"📝 Model card generated: {model_card_path}")
 
                 # Push model with model card
+                print("📤 Pushing model to HuggingFace Hub...")
                 model.push_to_hub(hub_model_id, private=hub_private)
+                print("✅ Model pushed successfully")
 
                 # Push the model card separately to ensure it's included
+                print("📤 Pushing model card...")
                 from huggingface_hub import HfApi
 
                 api = HfApi()
@@ -344,9 +412,10 @@ def build_dataset_and_train(
                     repo_id=hub_model_id,
                     repo_type="model",
                 )
+                print("✅ Model card pushed successfully")
 
                 print(
-                    f"✅ Model and model card successfully pushed to https://huggingface.co/{hub_model_id}"
+                    f"🎉 Model and model card successfully pushed to https://huggingface.co/{hub_model_id}"
                 )
             except Exception as e:
                 print(f"❌ Failed to push to HuggingFace Hub: {e}")
@@ -844,8 +913,9 @@ This model inherits potential biases from its training datasets (COCO, VQAv2). U
     gpu="A100-40GB",  # Single A100 GPU
     volumes={"/data": volume},
     secrets=secrets,
-    timeout=3600 * 4,  # 4 hour timeout
+    timeout=3600 * 6,  # 6 hour timeout
     memory=32768,  # 32GB RAM
+    min_containers=1,  # Keep one instance warm
 )
 def train_nanovlm(
     custom_dataset_path: str = None,

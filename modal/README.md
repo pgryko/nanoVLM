@@ -55,7 +55,7 @@ Create secrets in Modal dashboard for API keys:
 
 ```bash
 # Test your Modal setup
-uv run python modal/test_modal_setup.py
+uv run python modal/setup_modal.py
 ```
 
 ## 🎯 Quick Start

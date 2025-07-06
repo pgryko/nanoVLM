@@ -165,10 +165,36 @@ def run_validation():
     print("\n🧪 Running validation tests...")
 
     try:
+        # Test Modal CLI availability
         result = subprocess.run(
-            ["uv", "run", "python", "modal/test_modal_setup.py"], check=False
+            ["modal", "--version"], capture_output=True, check=False
         )
-        return result.returncode == 0
+        if result.returncode != 0:
+            print("❌ Modal CLI not available")
+            return False
+        print("✅ Modal CLI available")
+
+        # Test Modal authentication
+        result = subprocess.run(
+            ["modal", "app", "list"], capture_output=True, check=False
+        )
+        if result.returncode != 0:
+            print("❌ Modal authentication failed")
+            return False
+        print("✅ Modal authentication working")
+
+        # Test Python imports
+        try:
+            import modal
+
+            print("✅ Modal Python package available")
+        except ImportError:
+            print("❌ Modal Python package not available")
+            return False
+
+        print("✅ All validation tests passed!")
+        return True
+
     except Exception as e:
         print(f"❌ Validation failed: {e}")
         return False
