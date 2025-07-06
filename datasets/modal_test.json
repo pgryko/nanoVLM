@@ -1,0 +1,28 @@
+[
+  {
+    "image_path": "test_image_1.jpg",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "What is in this image?"
+      },
+      {
+        "role": "assistant",
+        "content": "This is a test image for Modal training."
+      }
+    ]
+  },
+  {
+    "image_path": "test_image_2.jpg",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Describe this scene."
+      },
+      {
+        "role": "assistant",
+        "content": "This is another test image for validation."
+      }
+    ]
+  }
+]

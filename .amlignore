@@ -1,0 +1,65 @@
+# Azure ML ignore file - prevents uploading unnecessary files
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env/
+
+# Python cache
+__pycache__/
+.pytest_cache/
+*.py[oc]
+.ruff_cache/
+
+# Build artifacts
+build/
+dist/
+wheels/
+*.egg-info/
+.idea/
+# Logs and outputs
+wandb/
+logs/
+*.log
+*.csv
+results/
+checkpoints/
+assets/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+
+# Large model files (if any)
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Jupyter notebooks (optional - comment out if you want to include them)
+notebooks/
+*.ipynb
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+
+# Package files
+uv.lock
+pyproject.toml
+requirements*.txt
+
+# Slurm files
+*.slurm

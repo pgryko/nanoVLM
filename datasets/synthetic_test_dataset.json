@@ -1,0 +1,132 @@
+[
+  {
+    "image_path": "synthetic://red_square_255_100_100",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "What color is this image?"
+      },
+      {
+        "role": "assistant",
+        "content": "This image is red."
+      }
+    ]
+  },
+  {
+    "image_path": "synthetic://red_square_255_100_100",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Describe what you see."
+      },
+      {
+        "role": "assistant",
+        "content": "I see a red colored square."
+      }
+    ]
+  },
+  {
+    "image_path": "synthetic://green_square_100_255_100",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "What color is this image?"
+      },
+      {
+        "role": "assistant",
+        "content": "This image is green."
+      }
+    ]
+  },
+  {
+    "image_path": "synthetic://green_square_100_255_100",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Describe what you see."
+      },
+      {
+        "role": "assistant",
+        "content": "I see a green colored square."
+      }
+    ]
+  },
+  {
+    "image_path": "synthetic://blue_square_100_100_255",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "What color is this image?"
+      },
+      {
+        "role": "assistant",
+        "content": "This image is blue."
+      }
+    ]
+  },
+  {
+    "image_path": "synthetic://blue_square_100_100_255",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Describe what you see."
+      },
+      {
+        "role": "assistant",
+        "content": "I see a blue colored square."
+      }
+    ]
+  },
+  {
+    "image_path": "synthetic://yellow_square_255_255_100",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "What color is this image?"
+      },
+      {
+        "role": "assistant",
+        "content": "This image is yellow."
+      }
+    ]
+  },
+  {
+    "image_path": "synthetic://yellow_square_255_255_100",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Describe what you see."
+      },
+      {
+        "role": "assistant",
+        "content": "I see a yellow colored square."
+      }
+    ]
+  },
+  {
+    "image_path": "synthetic://purple_square_255_100_255",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "What color is this image?"
+      },
+      {
+        "role": "assistant",
+        "content": "This image is purple."
+      }
+    ]
+  },
+  {
+    "image_path": "synthetic://purple_square_255_100_255",
+    "conversations": [
+      {
+        "role": "user",
+        "content": "Describe what you see."
+      },
+      {
+        "role": "assistant",
+        "content": "I see a purple colored square."
+      }
+    ]
+  }
+]

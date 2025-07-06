@@ -112,7 +112,12 @@ class CustomDataset(Dataset):
         return len(self.data)
 
     def _load_image(self, image_path: str) -> Image.Image:
-        """Load an image from path."""
+        """Load an image from path or generate synthetic image."""
+        # Handle synthetic images
+        if image_path.startswith("synthetic://"):
+            return self._generate_synthetic_image(image_path)
+
+        # Handle regular image files
         if self.image_root_dir:
             full_path = self.image_root_dir / image_path
         else:
@@ -125,6 +130,34 @@ class CustomDataset(Dataset):
         if image.mode != "RGB":
             image = image.convert("RGB")
         return image
+
+    def _generate_synthetic_image(self, synthetic_path: str) -> Image.Image:
+        """Generate a synthetic image from the synthetic:// path."""
+        import numpy as np
+
+        # Parse the synthetic path: synthetic://color_square_r_g_b
+        try:
+            # Remove synthetic:// prefix
+            path_info = synthetic_path.replace("synthetic://", "")
+
+            # Extract RGB values from the path
+            parts = path_info.split("_")
+            if len(parts) >= 5:  # color_square_r_g_b
+                r, g, b = int(parts[-3]), int(parts[-2]), int(parts[-1])
+            else:
+                # Default to a random color if parsing fails
+                r, g, b = 128, 128, 128
+
+            # Create a 224x224 image with the specified color
+            img_array = np.full((224, 224, 3), [r, g, b], dtype=np.uint8)
+            image = Image.fromarray(img_array)
+
+            return image
+
+        except Exception:
+            # Fallback to a gray image if generation fails
+            img_array = np.full((224, 224, 3), [128, 128, 128], dtype=np.uint8)
+            return Image.fromarray(img_array)
 
     def _prepare_messages(self, conversations: List[Dict], num_images: int = 1):
         """Prepare messages with image tokens."""

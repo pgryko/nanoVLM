@@ -55,7 +55,7 @@ def submit_training_job(
 
     # Create job
     job = command(
-        code="../",  # Upload entire nanoVLM directory
+        code="./",  # Upload current directory only
         command=command_str,
         environment=environment,
         compute=compute_target,

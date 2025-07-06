@@ -81,6 +81,55 @@ python train.py
 ```
 which will use the default `models/config.py`.
 
+### Training on Modal.com 🚀
+
+For serverless GPU training with cost optimization, you can use Modal.com:
+
+```bash
+# Install Modal and authenticate
+uv add modal
+modal setup
+
+# Quick start with example dataset
+./modal/quick_start.sh
+
+# Or train with your custom dataset
+python modal/submit_modal_training.py \
+  --custom_dataset_path your_dataset.json \
+  --batch_size 8 \
+  --max_training_steps 2000 \
+  --wandb_entity your_username
+```
+
+**Benefits of Modal.com:**
+- 💰 **Cost-effective**: Pay only for compute time used
+- ⚡ **Fast startup**: Containers start in seconds
+- 🎯 **GPU access**: Easy access to A100, H100 GPUs
+- 🔧 **No infrastructure**: Fully serverless
+
+See [`modal/README.md`](modal/README.md) for detailed setup instructions and examples.
+
+### Local Testing on M1 Mac 🧪
+
+Before moving to cloud training, test your setup locally:
+
+```bash
+# Quick validation (30 seconds)
+uv run python quick_validation_test.py
+
+# Full local training test (2-5 minutes)
+uv run python test_local_training.py
+```
+
+This validates:
+- ✅ M1 Mac MPS compatibility
+- ✅ Model initialization and forward pass
+- ✅ Dataset loading and processing
+- ✅ W&B logging integration
+- ✅ HuggingFace model publishing
+
+Perfect for confirming everything works before cloud training!
+
 ## Generate
 
 To try a [trained model](https://huggingface.co/lusxvr/nanoVLM-450M), you can simply use the provided generate script
