@@ -69,6 +69,15 @@ class TrainConfig:
     eval_in_epochs: bool = True
     eval_interval: int = gradient_accumulation_steps * 100
     stats_log_interval: int = gradient_accumulation_steps * 25
+    generation_eval_interval: int = (
+        gradient_accumulation_steps * 50
+    )  # Interval for generation sampling
+    gradient_log_interval: int = (
+        gradient_accumulation_steps * 100
+    )  # Interval for gradient stats
+    collapse_detection_interval: int = (
+        gradient_accumulation_steps * 100
+    )  # Interval for collapse detection
     max_training_steps: int = 5000
     max_images_per_example: int = 4
     max_images_per_knapsack: int = 18

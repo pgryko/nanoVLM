@@ -25,6 +25,14 @@ from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
 import models.config as config
 from data.data_utils import synchronized_dataloader_step
+from utils.training_logger import (
+    log_generation_samples,
+    log_token_statistics,
+    log_loss_breakdown,
+    detect_model_collapse,
+    log_gradient_statistics,
+    log_answer_length_distribution,
+)
 
 # Otherwise, the tokenizer will throw a warning
 import os
@@ -348,7 +356,7 @@ def train(train_cfg, vlm_cfg):
             )
             with autocast_context:
                 with context:
-                    _, loss = model(
+                    logits, loss = model(
                         input_ids, images, attention_mask=attention_mask, targets=labels
                     )
 
@@ -376,6 +384,21 @@ def train(train_cfg, vlm_cfg):
                 optimizer.step()
                 optimizer.zero_grad()
 
+                # Log learning rates
+                if (
+                    train_cfg.log_wandb
+                    and is_master()
+                    and global_step % train_cfg.stats_log_interval == 0
+                ):
+                    wandb.log(
+                        {
+                            "lr/modality_projector": adj_lr_mp,
+                            "lr/vision_encoder": adj_lr_backbones,
+                            "lr/language_model": adj_lr_backbones,
+                        },
+                        step=global_step,
+                    )
+
             batch_loss = loss.item()
             if train_cfg.gradient_accumulation_steps > 1:
                 batch_loss = batch_loss * train_cfg.gradient_accumulation_steps
@@ -401,6 +424,24 @@ def train(train_cfg, vlm_cfg):
             accumulated_stats["fw_bw_time"].append(fw_bw_time)
             accumulated_stats["post_process_time"].append(post_process_time)
             accumulated_stats["images_per_sample"].extend(images_per_sample)
+
+            # Enhanced logging for training diagnosis
+            if is_update_step and train_cfg.log_wandb and is_master():
+                # Log token statistics
+                if global_step % (train_cfg.stats_log_interval // 2) == 0:
+                    log_token_statistics(input_ids, labels, tokenizer, global_step)
+
+                # Log loss breakdown
+                if global_step % train_cfg.stats_log_interval == 0:
+                    log_loss_breakdown(logits, labels, batch_loss, global_step)
+
+                # Log answer length distribution
+                if global_step % (train_cfg.stats_log_interval * 2) == 0:
+                    log_answer_length_distribution(labels, global_step, epoch)
+
+                # Log gradient statistics
+                if global_step % train_cfg.gradient_log_interval == 0:
+                    log_gradient_statistics(model, global_step)
 
             if (
                 train_cfg.eval_in_epochs
@@ -489,6 +530,45 @@ def train(train_cfg, vlm_cfg):
                                 },
                                 step=global_step,
                             )
+
+                            # Enhanced evaluation logging
+                            # Generation sampling
+                            if global_step % train_cfg.generation_eval_interval == 0:
+                                try:
+                                    gen_stats = log_generation_samples(
+                                        model,
+                                        val_loader.dataset,
+                                        tokenizer,
+                                        get_image_processor(vlm_cfg.vit_img_size),
+                                        device,
+                                        global_step,
+                                    )
+                                    print(
+                                        f"Generation sampling - Avg length: {gen_stats.get('avg_length', 0):.1f}"
+                                    )
+                                except Exception as e:
+                                    print(f"Error in generation sampling: {e}")
+
+                            # Collapse detection
+                            if global_step % train_cfg.collapse_detection_interval == 0:
+                                try:
+                                    collapse_stats = detect_model_collapse(
+                                        model,
+                                        val_loader.dataset,
+                                        tokenizer,
+                                        get_image_processor(vlm_cfg.vit_img_size),
+                                        device,
+                                        global_step,
+                                    )
+                                    if collapse_stats.get("collapsed", False):
+                                        print(
+                                            f"⚠️  MODEL COLLAPSE DETECTED: {collapse_stats.get('reason', 'unknown')}"
+                                        )
+                                        print(
+                                            f"Most common token: {collapse_stats.get('most_common_token', 'unknown')}"
+                                        )
+                                except Exception as e:
+                                    print(f"Error in collapse detection: {e}")
 
                 model.train()
 

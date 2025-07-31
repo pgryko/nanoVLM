@@ -23,6 +23,14 @@ from data.custom_dataset import CustomDataset, CustomMultiImageDataset
 from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
 import models.config as config
+from utils.training_logger import (
+    log_generation_samples,
+    log_token_statistics,
+    log_loss_breakdown,
+    detect_model_collapse,
+    log_gradient_statistics,
+    log_answer_length_distribution,
+)
 
 import os
 
@@ -322,7 +330,7 @@ def train(train_cfg, vlm_cfg):
             # Forward pass with autocast
             with autocast_context:
                 with context:
-                    _, loss = model(
+                    logits, loss = model(
                         input_ids, images, attention_mask=attention_mask, targets=labels
                     )
 
@@ -357,6 +365,35 @@ def train(train_cfg, vlm_cfg):
 
             num_tokens = torch.sum(attention_mask).item()
             total_tokens_processed += num_tokens
+
+            # Enhanced logging for training diagnosis
+            if is_update_step and train_cfg.log_wandb:
+                # Log token statistics
+                if global_step % (100 // 2) == 0:  # More frequent than eval
+                    log_token_statistics(input_ids, labels, tokenizer, global_step)
+
+                # Log loss breakdown
+                if global_step % 100 == 0:
+                    log_loss_breakdown(logits, labels, batch_loss, global_step)
+
+                # Log answer length distribution
+                if global_step % 200 == 0:
+                    log_answer_length_distribution(labels, global_step, epoch)
+
+                # Log gradient statistics
+                if global_step % 200 == 0:
+                    log_gradient_statistics(model, global_step)
+
+                # Log learning rates
+                if global_step % 100 == 0 and is_update_step:
+                    wandb.log(
+                        {
+                            "lr/modality_projector": optimizer.param_groups[0]["lr"],
+                            "lr/vision_encoder": optimizer.param_groups[1]["lr"],
+                            "lr/language_model": optimizer.param_groups[1]["lr"],
+                        },
+                        step=global_step,
+                    )
 
             # Evaluation
             if (
@@ -421,6 +458,45 @@ def train(train_cfg, vlm_cfg):
                                 },
                                 step=global_step,
                             )
+
+                            # Enhanced evaluation logging
+                            # Generation sampling
+                            if global_step % 200 == 0:  # Every 200 steps
+                                try:
+                                    gen_stats = log_generation_samples(
+                                        model,
+                                        val_loader.dataset,
+                                        tokenizer,
+                                        get_image_processor(vlm_cfg.vit_img_size),
+                                        device,
+                                        global_step,
+                                    )
+                                    print(
+                                        f"Generation sampling - Avg length: {gen_stats.get('avg_length', 0):.1f}"
+                                    )
+                                except Exception as e:
+                                    print(f"Error in generation sampling: {e}")
+
+                            # Collapse detection
+                            if global_step % 300 == 0:  # Every 300 steps
+                                try:
+                                    collapse_stats = detect_model_collapse(
+                                        model,
+                                        val_loader.dataset,
+                                        tokenizer,
+                                        get_image_processor(vlm_cfg.vit_img_size),
+                                        device,
+                                        global_step,
+                                    )
+                                    if collapse_stats.get("collapsed", False):
+                                        print(
+                                            f"⚠️  MODEL COLLAPSE DETECTED: {collapse_stats.get('reason', 'unknown')}"
+                                        )
+                                        print(
+                                            f"Most common token: {collapse_stats.get('most_common_token', 'unknown')}"
+                                        )
+                                except Exception as e:
+                                    print(f"Error in collapse detection: {e}")
 
                 model.train()
 
