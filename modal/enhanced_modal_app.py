@@ -23,11 +23,11 @@ app = modal.App("nanovlm-enhanced-training")
 # Enhanced Modal image with optimizations
 image = (
     modal.Image.debian_slim(python_version="3.12")
-    .pip_install_from_requirements("modal/requirements.txt")
     .apt_install("git", "wget", "curl", "htop")
-    .run_commands("pip install --upgrade pip")
-    # Install additional packages for monitoring
-    .pip_install("psutil", "gpustat")
+    .pip_install(
+        "torch", "torchvision", "transformers", "datasets", "pillow", 
+        "tqdm", "wandb", "psutil", "gpustat", "scikit-learn", "numpy"
+    )
     # Set environment variables for optimization
     .env({"PYTHONPATH": "/root/nanovlm", "TOKENIZERS_PARALLELISM": "false"})
     # Copy the entire nanoVLM codebase - MUST BE LAST
@@ -218,6 +218,9 @@ def enhanced_train(
     pause_on_collapse: bool = False,
 ):
     """Enhanced training with all improvements"""
+    
+    # Initialize wandb_run to None at the start to avoid UnboundLocalError
+    wandb_run = None
 
     try:
         # Set up environment
@@ -661,7 +664,7 @@ def build_public_dataset_on_modal(dataset_type: str, limit: int, split: str = "t
 
 
 def build_coco_dataset_on_modal(limit: int, split: str, dataset_dir):
-    """Build COCO dataset on Modal"""
+    """Build image captioning dataset on Modal using Flickr30k"""
     from datasets import load_dataset
     from tqdm import tqdm
     import json
@@ -671,22 +674,31 @@ def build_coco_dataset_on_modal(limit: int, split: str, dataset_dir):
     dataset_dir = Path(dataset_dir)
 
     print(f"Loading COCO Captions {split} dataset...")
-    dataset = load_dataset("HuggingFaceM4/COCO", split=split, trust_remote_code=True)
+    # Use a simple image captioning dataset without custom scripts
+    dataset = load_dataset("nlphuji/flickr30k", split=split)
     if limit:
         dataset = dataset.select(range(min(limit, len(dataset))))
 
     converted_data = []
     image_dir = dataset_dir / "images"
 
-    print("Converting COCO to NanoVLM format...")
+    print("Converting Flickr30k to NanoVLM format...")
     for idx, item in enumerate(tqdm(dataset)):
         try:
-            captions = item["sentences"]["raw"]
-            if not captions:
+            # Handle Flickr30k dataset structure
+            if "caption" in item:
+                caption = item["caption"]
+            elif "captions" in item and len(item["captions"]) > 0:
+                caption = item["captions"][0]  # Use first caption
+            else:
+                # Skip items without captions
                 continue
 
-            caption = captions[0]
-            image_filename = f"coco_{split}_{item['cocoid']}.jpg"
+            # Use image filename from dataset or generate one
+            if "img_id" in item:
+                image_filename = f"flickr_{item['img_id']}.jpg"
+            else:
+                image_filename = f"flickr_{split}_{idx}.jpg"
             image_path = image_dir / image_filename
 
             # Save image
@@ -705,15 +717,15 @@ def build_coco_dataset_on_modal(limit: int, split: str, dataset_dir):
             converted_data.append(converted_item)
 
         except Exception as e:
-            print(f"Error processing COCO item {idx}: {e}")
+            print(f"Error processing Flickr30k item {idx}: {e}")
             continue
 
     # Save dataset
-    output_path = dataset_dir / "coco_dataset.json"
+    output_path = dataset_dir / "flickr30k_dataset.json"
     with open(output_path, "w") as f:
         json.dump(converted_data, f, indent=2)
 
-    print(f"COCO dataset saved: {len(converted_data)} samples")
+    print(f"Flickr30k dataset saved: {len(converted_data)} samples")
     return str(output_path)
 
 
